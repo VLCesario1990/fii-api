@@ -8,11 +8,11 @@ import time
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    "User-Agent": "Mozilla/5.0"
 }
 
 # =========================
-# 🔒 REQUEST SEGURO
+# REQUEST SEGURO
 # =========================
 def safe_request(url):
     try:
@@ -26,7 +26,7 @@ def safe_request(url):
 
 
 # =========================
-# 🥇 MEUSDIVIDENDOS
+# 🥇 MEUSDIVIDENDOS (CORRIGIDO)
 # =========================
 def get_meusdividendos(ticker):
     try:
@@ -38,39 +38,26 @@ def get_meusdividendos(ticker):
             return None
 
         soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(" ", strip=True)
 
-        vacancia = "N/D"
-        inad = "N/D"
-
-        # 🔥 busca spans com %
-        spans = soup.find_all("span")
-
-        for span in spans:
-            texto = span.get_text(strip=True)
-
-            if "%" in texto:
-                parent = span.find_parent()
-                if not parent:
-                    continue
-
-                contexto = parent.get_text(" ", strip=True).lower()
-
-                if "vac" in contexto and vacancia == "N/D":
-                    vacancia = texto.replace("%", "")
-
-                elif "inad" in contexto and inad == "N/D":
-                    inad = texto.replace("%", "")
-
-        # 🔥 PORTFÓLIO (FIIs dentro do fundo)
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
-
-        encontrou_algo = (
-            len(ativos) > 0 or
-            vacancia != "N/D" or
-            inad != "N/D"
+        # 🔥 EXTRAÇÃO CORRETA
+        vacancia_match = re.search(
+            r"Vac[âa]ncia Financeira\s*([0-9]+,[0-9]+|[0-9]+)%",
+            text
         )
 
-        if encontrou_algo:
+        inad_match = re.search(
+            r"Inadimpl[êe]ncia\s*([0-9]+,[0-9]+|[0-9]+)%",
+            text
+        )
+
+        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
+        inad = inad_match.group(1) if inad_match else "N/D"
+
+        # 🔥 PORTFÓLIO
+        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
+
+        if vacancia != "N/D" or inad != "N/D" or len(ativos) > 0:
             return {
                 "ticker": ticker.upper(),
                 "vacancia": vacancia,
@@ -87,7 +74,7 @@ def get_meusdividendos(ticker):
 
 
 # =========================
-# 🥈 FUNDSEXPLORER (fallback)
+# 🥈 FUNDSEXPLORER
 # =========================
 def get_fundsexplorer(ticker):
     try:
@@ -100,7 +87,6 @@ def get_fundsexplorer(ticker):
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text()
 
-        # VACÂNCIA
         vacancia_match = re.search(
             r"Vac[âa]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
             text,
@@ -108,7 +94,6 @@ def get_fundsexplorer(ticker):
         )
         vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
-        # INADIMPLÊNCIA
         inad_match = re.search(
             r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
             text,
@@ -116,7 +101,6 @@ def get_fundsexplorer(ticker):
         )
         inad = inad_match.group(1) if inad_match else "N/D"
 
-        # PORTFÓLIO
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
         return {
@@ -133,25 +117,22 @@ def get_fundsexplorer(ticker):
 
 
 # =========================
-# 🔥 FUNÇÃO PRINCIPAL
+# FUNÇÃO PRINCIPAL
 # =========================
 def get_fii_data(ticker):
 
-    # 🥇 tenta MeusDividendos primeiro
+    # 🥇 PRIORIDADE
     data = get_meusdividendos(ticker)
-
     if data:
-        print(f"✔ {ticker} veio do MEUSDIVIDENDOS")
-        return data  # 🔥 PARA AQUI
-
-    # 🥈 fallback
-    data = get_fundsexplorer(ticker)
-
-    if data:
-        print(f"✔ {ticker} veio do FUNDSEXPLORER")
+        print(f"✔ {ticker} → MEUSDIVIDENDOS")
         return data
 
-    # ❌ nada encontrado
+    # 🥈 FALLBACK
+    data = get_fundsexplorer(ticker)
+    if data:
+        print(f"✔ {ticker} → FUNDSEXPLORER")
+        return data
+
     return {
         "ticker": ticker.upper(),
         "vacancia": "N/D",
@@ -162,7 +143,7 @@ def get_fii_data(ticker):
 
 
 # =========================
-# 🌐 ROTAS
+# ROTAS
 # =========================
 @app.route("/")
 def home():
@@ -175,8 +156,9 @@ def fii(ticker):
 
 
 # =========================
-# 🚀 RAILWAY
+# RAILWAY
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+    
