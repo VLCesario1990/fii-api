@@ -15,11 +15,28 @@ def get_fii_data(ticker):
         url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
         r = requests.get(url, headers=HEADERS, timeout=10)
 
+        # 🚨 se site bloquear
         if r.status_code != 200:
-            return {"erro": f"HTTP {r.status_code}"}
+            return {
+                "ticker": ticker.upper(),
+                "vacancia": "N/D",
+                "inadimplencia": "N/D",
+                "portfolio": [],
+                "erro": f"HTTP {r.status_code}"
+            }
 
         soup = BeautifulSoup(r.text, "html.parser")
         text = soup.get_text()
+
+        # 🚨 se veio página estranha (sem conteúdo esperado)
+        if len(text) < 100:
+            return {
+                "ticker": ticker.upper(),
+                "vacancia": "N/D",
+                "inadimplencia": "N/D",
+                "portfolio": [],
+                "erro": "Conteúdo inválido"
+            }
 
         # VACÂNCIA
         vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
@@ -29,7 +46,7 @@ def get_fii_data(ticker):
         inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
         inad = inad_match.group(1) if inad_match else "N/D"
 
-        # PORTFÓLIO (tickers encontrados)
+        # PORTFÓLIO
         ativos = re.findall(r"[A-Z]{4}\d{2}", r.text)
         ativos = list(set(ativos))
 
@@ -41,11 +58,17 @@ def get_fii_data(ticker):
         }
 
     except Exception as e:
-        return {"erro": str(e)}
+        return {
+            "ticker": ticker.upper(),
+            "vacancia": "N/D",
+            "inadimplencia": "N/D",
+            "portfolio": [],
+            "erro": str(e)
+        }
 
 @app.route("/")
 def home():
-    return "API FII rodando 🚀"
+    return jsonify({"status": "API FII rodando 🚀"})
 
 @app.route("/fii/<ticker>")
 def fii(ticker):
