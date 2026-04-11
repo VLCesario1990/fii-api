@@ -8,9 +8,10 @@ import time
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
+# 🔒 REQUEST SEGURO
 def safe_request(url):
     try:
         time.sleep(1)
@@ -32,15 +33,26 @@ def get_meusdividendos(ticker):
         if not html:
             return None
 
+        # 🔥 PORTFÓLIO
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
-        vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", html)
+        # 🔥 VACÂNCIA (CORRIGIDO)
+        vacancia_match = re.search(
+            r"Vac[âa]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
+            html,
+            re.DOTALL
+        )
         vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
-        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", html)
+        # 🔥 INADIMPLÊNCIA (CORRIGIDO)
+        inad_match = re.search(
+            r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
+            html,
+            re.DOTALL
+        )
         inad = inad_match.group(1) if inad_match else "N/D"
 
-        # 🚨 REGRA IMPORTANTE
+        # 🚨 REGRA: só retorna se encontrou algo
         encontrou_algo = (
             len(ativos) > 0 or
             vacancia != "N/D" or
@@ -58,7 +70,8 @@ def get_meusdividendos(ticker):
 
         return None
 
-    except:
+    except Exception as e:
+        print(f"Erro MeusDividendos: {e}")
         return None
 
 
@@ -74,10 +87,18 @@ def get_fundsexplorer(ticker):
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text()
 
-        vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
+        vacancia_match = re.search(
+            r"Vac[âa]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
+            text,
+            re.DOTALL
+        )
         vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
-        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
+        inad_match = re.search(
+            r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
+            text,
+            re.DOTALL
+        )
         inad = inad_match.group(1) if inad_match else "N/D"
 
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
@@ -90,28 +111,29 @@ def get_fundsexplorer(ticker):
             "fonte": "fundsexplorer"
         }
 
-    except:
+    except Exception as e:
+        print(f"Erro FundsExplorer: {e}")
         return None
 
 
-# 🔥 FUNÇÃO PRINCIPAL (COM STOP INTELIGENTE)
+# 🔥 FUNÇÃO PRINCIPAL
 def get_fii_data(ticker):
 
-    # 🥇 tenta primeiro
+    # 🥇 PRIORIDADE TOTAL
     data = get_meusdividendos(ticker)
 
     if data:
         print(f"✔ {ticker} veio do MEUSDIVIDENDOS")
-        return data  # 🔥 PARA AQUI
+        return data  # 🚨 PARA AQUI
 
-    # 🥈 só entra aqui se NÃO encontrou nada
+    # 🥈 fallback
     data = get_fundsexplorer(ticker)
 
     if data:
         print(f"✔ {ticker} veio do FUNDSEXPLORER")
         return data
 
-    # ❌ nada encontrado
+    # ❌ fallback final
     return {
         "ticker": ticker.upper(),
         "vacancia": "N/D",
@@ -132,7 +154,7 @@ def fii(ticker):
     return jsonify(get_fii_data(ticker))
 
 
-# 🚀 RAILWAY
+# 🚀 RAILWAY / PRODUÇÃO
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
