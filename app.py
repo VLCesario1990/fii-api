@@ -1,8 +1,8 @@
 from flask import Flask, jsonify
 import requests
-from bs4 import BeautifulSoup
 import os
 import re
+import json
 
 app = Flask(__name__)
 
@@ -11,7 +11,56 @@ HEADERS = {
 }
 
 # =========================
-# FUNDSEXPLORER (SEM JS)
+# 🔥 EXTRAIR JSON DO GRÁFICO
+# =========================
+def extract_chart_json(html):
+    try:
+        # procura bloco JS que contém os dados
+        match = re.search(r"var\s+chartData\s*=\s*(\{.*?\});", html, re.DOTALL)
+
+        if not match:
+            return None
+
+        json_str = match.group(1)
+
+        # limpa possíveis erros de JS -> JSON
+        json_str = json_str.replace("'", '"')
+
+        return json.loads(json_str)
+
+    except:
+        return None
+
+
+# =========================
+# 🔥 PEGAR VACÂNCIA REAL (DATA VIEW)
+# =========================
+def get_vacancia_from_json(chart_json):
+    try:
+        # geralmente fica dentro de datasets
+        datasets = chart_json.get("datasets", [])
+
+        vacancia_financeira = None
+
+        for ds in datasets:
+            label = ds.get("label", "").lower()
+
+            if "vacância financeira" in label:
+                data = ds.get("data", [])
+
+                if data:
+                    # pega último valor (mais recente)
+                    vacancia_financeira = data[-1]
+                    break
+
+        return str(vacancia_financeira) if vacancia_financeira is not None else "N/D"
+
+    except:
+        return "N/D"
+
+
+# =========================
+# 🔥 FUNÇÃO PRINCIPAL
 # =========================
 def get_fundsexplorer_data(ticker):
     try:
@@ -24,22 +73,17 @@ def get_fundsexplorer_data(ticker):
 
         html = response.text
 
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(" ", strip=True)
+        # =========================
+        # 🎯 VACÂNCIA VIA JSON
+        # =========================
+        chart_json = extract_chart_json(html)
+        vacancia = get_vacancia_from_json(chart_json) if chart_json else "N/D"
 
         # =========================
-        # VACÂNCIA
+        # 📊 INADIMPLÊNCIA (fallback regex)
         # =========================
-        vacancia_match = re.search(
-            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
-            text
-        )
+        text = re.sub(r"\s+", " ", html)
 
-        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
-
-        # =========================
-        # INADIMPLÊNCIA
-        # =========================
         inad_match = re.search(
             r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
             text
@@ -48,7 +92,7 @@ def get_fundsexplorer_data(ticker):
         inadimplencia = inad_match.group(1) if inad_match else "N/D"
 
         # =========================
-        # PORTFÓLIO
+        # 🏢 PORTFÓLIO
         # =========================
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
@@ -57,16 +101,16 @@ def get_fundsexplorer_data(ticker):
             "vacancia": vacancia,
             "inadimplencia": inadimplencia,
             "portfolio": ativos[:10],
-            "fonte": "fundsexplorer"
+            "fonte": "fundsexplorer_json"
         }
 
     except Exception as e:
         return {
             "ticker": ticker.upper(),
-            "erro": str(e),
             "vacancia": "N/D",
             "inadimplencia": "N/D",
-            "portfolio": []
+            "portfolio": [],
+            "erro": str(e)
         }
 
 
@@ -75,7 +119,7 @@ def get_fundsexplorer_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII sem Playwright 🚀"})
+    return jsonify({"status": "API FII (JSON REAL) 🚀"})
 
 
 @app.route("/fii/<ticker>")
