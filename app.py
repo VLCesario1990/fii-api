@@ -3,7 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import re
-import time
+import asyncio
+from playwright.async_api import async_playwright
 
 app = Flask(__name__)
 
@@ -12,11 +13,10 @@ HEADERS = {
 }
 
 # =========================
-# REQUEST
+# REQUEST SIMPLES
 # =========================
 def safe_request(url):
     try:
-        time.sleep(1)
         r = requests.get(url, headers=HEADERS, timeout=10)
         if r.status_code == 200:
             return r.text
@@ -40,111 +40,81 @@ def get_meusdividendos(ticker):
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(" ", strip=True)
 
-        # VACÂNCIA
         vacancia_match = re.search(
             r"Vac[âa]ncia Financeira\s*([0-9]+,[0-9]+|[0-9]+)%",
             text
         )
 
-        # INADIMPLÊNCIA
         inad_match = re.search(
             r"Inadimpl[êe]ncia\s*([0-9]+,[0-9]+|[0-9]+)%",
             text
         )
 
-        vacancia = vacancia_match.group(1) if vacancia_match else None
-        inad = inad_match.group(1) if inad_match else None
-
-        # PORTFÓLIO
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
-
         return {
-            "vacancia": vacancia,
-            "inadimplencia": inad,
-            "portfolio": ativos[:10],
-            "fonte_md": True
+            "vacancia_md": vacancia_match.group(1) if vacancia_match else None,
+            "inadimplencia": inad_match.group(1) if inad_match else None
         }
 
-    except Exception as e:
-        print("Erro MeusDividendos:", e)
+    except:
         return {}
 
 
 # =========================
-# 🥈 FUNDSEXPLORER
+# 🥈 FUNDSEXPLORER (COM JS)
 # =========================
-def get_fundsexplorer(ticker):
+async def get_fundsexplorer_js(ticker):
     try:
         url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
 
-        html = safe_request(url)
-        if not html:
-            return {}
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
 
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text()
+            await page.goto(url, timeout=60000)
 
-        # fallback (às vezes funciona)
+            # 🔥 espera página carregar
+            await page.wait_for_timeout(5000)
+
+            content = await page.content()
+            await browser.close()
+
+        soup = BeautifulSoup(content, "html.parser")
+        text = soup.get_text(" ", strip=True)
+
+        # 🔥 VACÂNCIA DO GRÁFICO
         vacancia_match = re.search(
-            r"Vac[âa]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
-            text,
-            re.DOTALL
+            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
+            text
         )
 
-        inad_match = re.search(
-            r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
-            text,
-            re.DOTALL
-        )
-
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
+        vacancia = vacancia_match.group(1) if vacancia_match else None
 
         return {
-            "vacancia_fe": vacancia_match.group(1) if vacancia_match else None,
-            "inad_fe": inad_match.group(1) if inad_match else None,
-            "portfolio_fe": ativos[:10],
-            "fonte_fe": True
+            "vacancia": vacancia
         }
 
     except Exception as e:
-        print("Erro FundsExplorer:", e)
+        print("Erro JS:", e)
         return {}
 
 
 # =========================
-# 🧠 MERGE INTELIGENTE
+# MERGE
 # =========================
-def merge_data(ticker, md, fe):
+async def get_fii_data(ticker):
+
+    md = get_meusdividendos(ticker)
+    fe = await get_fundsexplorer_js(ticker)
 
     return {
         "ticker": ticker.upper(),
 
-        # 🔥 PRIORIDADE: MEUSDIVIDENDOS
-        "vacancia": md.get("vacancia") or fe.get("vacancia_fe") or "N/D",
-        "inadimplencia": md.get("inadimplencia") or fe.get("inad_fe") or "N/D",
+        # 🔥 prioridade FUNDSEXPLORER
+        "vacancia": fe.get("vacancia") or md.get("vacancia_md") or "N/D",
 
-        # 🔥 PORTFÓLIO: junta os dois
-        "portfolio": list(set(
-            (md.get("portfolio") or []) +
-            (fe.get("portfolio_fe") or [])
-        ))[:10],
-
-        "fontes": {
-            "meusdividendos": md.get("fonte_md", False),
-            "fundsexplorer": fe.get("fonte_fe", False)
-        }
+        # 🔥 prioridade MEUSDIVIDENDOS
+        "inadimplencia": md.get("inadimplencia") or "N/D"
     }
-
-
-# =========================
-# FUNÇÃO PRINCIPAL
-# =========================
-def get_fii_data(ticker):
-
-    md = get_meusdividendos(ticker)
-    fe = get_fundsexplorer(ticker)
-
-    return merge_data(ticker, md, fe)
 
 
 # =========================
@@ -152,12 +122,13 @@ def get_fii_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII PRO rodando 🚀"})
+    return jsonify({"status": "API FII JS rodando 🚀"})
 
 
 @app.route("/fii/<ticker>")
 def fii(ticker):
-    return jsonify(get_fii_data(ticker))
+    data = asyncio.run(get_fii_data(ticker))
+    return jsonify(data)
 
 
 # =========================
