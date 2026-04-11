@@ -1,51 +1,41 @@
 from flask import Flask, jsonify
+import requests
+from bs4 import BeautifulSoup
 import os
 import re
-import asyncio
-from playwright.async_api import async_playwright
 
 app = Flask(__name__)
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
 # =========================
-# FUNDSEXPLORER (JS + DATA VIEW)
+# FUNDSEXPLORER (SEM JS)
 # =========================
-async def get_fundsexplorer_data(ticker):
+def get_fundsexplorer_data(ticker):
     try:
         url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+        response = requests.get(url, headers=HEADERS, timeout=10)
 
-            await page.goto(url, timeout=60000)
+        if response.status_code != 200:
+            return {"erro": "Erro ao acessar site"}
 
-            # ⏳ espera carregar
-            await page.wait_for_timeout(5000)
+        html = response.text
 
-            # 🔥 TENTA ABRIR DATA VIEW (se existir botão)
-            try:
-                await page.click("text=Data View", timeout=3000)
-                await page.wait_for_timeout(2000)
-            except:
-                pass
-
-            content = await page.content()
-            await browser.close()
-
-        text = re.sub(r"\s+", " ", content)
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(" ", strip=True)
 
         # =========================
-        # VACÂNCIA FINANCEIRA (último valor da tabela)
+        # VACÂNCIA
         # =========================
-        matches = re.findall(
-            r"Vac[âa]ncia Financeira[^0-9]*([0-9]+\.?[0-9]*)",
+        vacancia_match = re.search(
+            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
             text
         )
 
-        if matches:
-            vacancia = matches[-1]  # último mês
-        else:
-            vacancia = "N/D"
+        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
         # =========================
         # INADIMPLÊNCIA
@@ -60,39 +50,37 @@ async def get_fundsexplorer_data(ticker):
         # =========================
         # PORTFÓLIO
         # =========================
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", content)))
+        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
         return {
             "ticker": ticker.upper(),
             "vacancia": vacancia,
             "inadimplencia": inadimplencia,
             "portfolio": ativos[:10],
-            "fonte": "fundsexplorer_data_view"
+            "fonte": "fundsexplorer"
         }
 
     except Exception as e:
-        print("Erro:", e)
         return {
             "ticker": ticker.upper(),
+            "erro": str(e),
             "vacancia": "N/D",
             "inadimplencia": "N/D",
-            "portfolio": [],
-            "erro": str(e)
+            "portfolio": []
         }
 
 
 # =========================
-# ROUTES
+# ROTAS
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII (Data View real) 🚀"})
+    return jsonify({"status": "API FII sem Playwright 🚀"})
 
 
 @app.route("/fii/<ticker>")
 def fii(ticker):
-    data = asyncio.run(get_fundsexplorer_data(ticker))
-    return jsonify(data)
+    return jsonify(get_fundsexplorer_data(ticker))
 
 
 # =========================
