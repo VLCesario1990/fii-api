@@ -11,71 +11,69 @@ HEADERS = {
 }
 
 # ==============================
-# FUNÇÃO PRINCIPAL
+# FUNÇÃO PRINCIPAL (COM FALLBACK)
 # ==============================
 def get_fii_data(ticker):
-    try:
-        ticker = ticker.lower()
-        url = f"https://www.fundsexplorer.com.br/funds/{ticker}"
+    ticker = ticker.lower()
 
-        r = requests.get(url, headers=HEADERS, timeout=10)
+    fontes = [
+        f"https://www.fundsexplorer.com.br/funds/{ticker}",
+        f"https://investidor10.com.br/fiis/{ticker}"
+    ]
 
-        # 🚨 Se bloqueado
-        if r.status_code != 200:
-            return {
-                "ticker": ticker.upper(),
-                "vacancia": "N/D",
-                "inadimplencia": "N/D",
-                "portfolio": [],
-                "erro": f"HTTP {r.status_code}"
-            }
+    for url in fontes:
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=10)
 
-        soup = BeautifulSoup(r.text, "html.parser")
-        text = soup.get_text(separator=" ")
+            if r.status_code != 200:
+                continue
 
-        # 🚨 Página inválida
-        if len(text) < 200:
-            return {
-                "ticker": ticker.upper(),
-                "vacancia": "N/D",
-                "inadimplencia": "N/D",
-                "portfolio": [],
-                "erro": "Conteúdo inválido"
-            }
+            soup = BeautifulSoup(r.text, "html.parser")
+            text = soup.get_text(separator=" ")
 
-        # ==============================
-        # VACÂNCIA
-        # ==============================
-        vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
-        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
+            # 🚨 página inválida
+            if len(text) < 200:
+                continue
 
-        # ==============================
-        # INADIMPLÊNCIA
-        # ==============================
-        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
-        inad = inad_match.group(1) if inad_match else "N/D"
+            # ==============================
+            # VACÂNCIA
+            # ==============================
+            vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
+            vacancia = vacancia_match.group(1) if vacancia_match else None
 
-        # ==============================
-        # PORTFÓLIO
-        # ==============================
-        ativos = re.findall(r"[A-Z]{4}\d{2}", r.text)
-        ativos = list(set(ativos))
+            # ==============================
+            # INADIMPLÊNCIA
+            # ==============================
+            inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
+            inad = inad_match.group(1) if inad_match else None
 
-        return {
-            "ticker": ticker.upper(),
-            "vacancia": vacancia,
-            "inadimplencia": inad,
-            "portfolio": ativos[:5]
-        }
+            # ==============================
+            # PORTFÓLIO
+            # ==============================
+            ativos = re.findall(r"[A-Z]{4}\d{2}", r.text)
+            ativos = list(set(ativos))
 
-    except Exception as e:
-        return {
-            "ticker": ticker.upper(),
-            "vacancia": "N/D",
-            "inadimplencia": "N/D",
-            "portfolio": [],
-            "erro": str(e)
-        }
+            # se encontrou algo útil → retorna
+            if vacancia or inad or ativos:
+                return {
+                    "ticker": ticker.upper(),
+                    "vacancia": vacancia or "N/D",
+                    "inadimplencia": inad or "N/D",
+                    "portfolio": ativos[:5]
+                }
+
+        except Exception as e:
+            continue
+
+    # ==============================
+    # FALLBACK TOTAL
+    # ==============================
+    return {
+        "ticker": ticker.upper(),
+        "vacancia": "N/D",
+        "inadimplencia": "N/D",
+        "portfolio": []
+    }
 
 # ==============================
 # ROTAS
@@ -93,7 +91,7 @@ def fii(ticker):
     return jsonify(get_fii_data(ticker))
 
 # ==============================
-# RUN LOCAL (não usado no Railway)
+# RUN LOCAL (debug)
 # ==============================
 
 if __name__ == "__main__":
