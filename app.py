@@ -1,38 +1,40 @@
 from flask import Flask, jsonify
 import requests
 from bs4 import BeautifulSoup
+import os
+import re
 
 app = Flask(__name__)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
 def get_fii_data(ticker):
     try:
         url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
         r = requests.get(url, headers=HEADERS, timeout=10)
 
+        if r.status_code != 200:
+            return {"erro": f"HTTP {r.status_code}"}
+
         soup = BeautifulSoup(r.text, "html.parser")
-        html = soup.get_text()
+        text = soup.get_text()
 
-        vacancia = None
-        if "Vacância" in html:
-            try:
-                vacancia = html.split("Vacância")[1].split("%")[0].strip()
-            except:
-                pass
+        # VACÂNCIA
+        vacancia_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
+        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
-        inad = None
-        if "Inadimplência" in html:
-            try:
-                inad = html.split("Inadimplência")[1].split("%")[0].strip()
-            except:
-                pass
+        # INADIMPLÊNCIA
+        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
+        inad = inad_match.group(1) if inad_match else "N/D"
 
-        ativos = r.text
-        ativos = list(set([x for x in ativos.split() if len(x) == 6 and x[-2:].isdigit()]))
+        # PORTFÓLIO (tickers encontrados)
+        ativos = re.findall(r"[A-Z]{4}\d{2}", r.text)
+        ativos = list(set(ativos))
 
         return {
-            "ticker": ticker,
+            "ticker": ticker.upper(),
             "vacancia": vacancia,
             "inadimplencia": inad,
             "portfolio": ativos[:5]
@@ -41,9 +43,14 @@ def get_fii_data(ticker):
     except Exception as e:
         return {"erro": str(e)}
 
+@app.route("/")
+def home():
+    return "API FII rodando 🚀"
+
 @app.route("/fii/<ticker>")
 def fii(ticker):
     return jsonify(get_fii_data(ticker))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
