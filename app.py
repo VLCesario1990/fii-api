@@ -1,61 +1,100 @@
+from flask import Flask, jsonify
+import requests
+from bs4 import BeautifulSoup
+import os
+import re
+
+app = Flask(__name__)
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
+
+# 🔥 função principal
 def get_fii_data(ticker):
-    ticker = ticker.lower()
+    ticker = ticker.upper()
 
-    url = f"https://www.fundsexplorer.com.br/funds/{ticker}"
-
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-
-        if r.status_code != 200:
-            return fallback(ticker, f"HTTP {r.status_code}")
-
-        html = r.text
-
-        # 🔥 TENTA PEGAR JSON INTERNO (melhor chance)
-        vacancia = "N/D"
-        inad = "N/D"
-
-        # procura padrões escondidos
-        vac_match = re.search(r"vacancy.*?([0-9,.]+)", html, re.IGNORECASE)
-        inad_match = re.search(r"default.*?([0-9,.]+)", html, re.IGNORECASE)
-
-        if vac_match:
-            vacancia = vac_match.group(1)
-
-        if inad_match:
-            inad = inad_match.group(1)
-
-        # 🔥 fallback texto normal
-        if vacancia == "N/D":
-            vac_text = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", html)
-            if vac_text:
-                vacancia = vac_text.group(1)
-
-        if inad == "N/D":
-            inad_text = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", html)
-            if inad_text:
-                inad = inad_text.group(1)
-
-        # PORTFÓLIO
-        ativos = re.findall(r"[A-Z]{4}\d{2}", html)
-        ativos = list(set(ativos))
-
-        return {
-            "ticker": ticker.upper(),
-            "vacancia": vacancia,
-            "inadimplencia": inad,
-            "portfolio": ativos[:5]
-        }
-
-    except Exception as e:
-        return fallback(ticker, str(e))
-
-
-def fallback(ticker, erro):
-    return {
-        "ticker": ticker.upper(),
+    result = {
+        "ticker": ticker,
         "vacancia": "N/D",
         "inadimplencia": "N/D",
-        "portfolio": [],
-        "erro": erro
+        "portfolio": []
     }
+
+    try:
+        url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+
+        # fallback caso bloqueie
+        if r.status_code != 200:
+            return result
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        text = soup.get_text(" ", strip=True)
+
+        # =========================
+        # VACÂNCIA (mais robusto)
+        # =========================
+        vacancia_patterns = [
+            r"Vac[âa]ncia[^0-9]*([0-9,.]+)%",
+            r"Vacancy[^0-9]*([0-9,.]+)%"
+        ]
+
+        for pattern in vacancia_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result["vacancia"] = match.group(1)
+                break
+
+        # =========================
+        # INADIMPLÊNCIA
+        # =========================
+        inad_patterns = [
+            r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%",
+            r"Default[^0-9]*([0-9,.]+)%"
+        ]
+
+        for pattern in inad_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result["inadimplencia"] = match.group(1)
+                break
+
+        # =========================
+        # PORTFÓLIO (ativos reais)
+        # =========================
+        ativos = re.findall(r"\b[A-Z]{4}\d{2}\b", r.text)
+        ativos_unicos = list(set(ativos))
+
+        # remove o próprio ticker
+        ativos_unicos = [a for a in ativos_unicos if a != ticker]
+
+        result["portfolio"] = ativos_unicos[:10]
+
+        return result
+
+    except Exception as e:
+        result["erro"] = str(e)
+        return result
+
+
+# 🔥 rota raiz
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "API FII rodando 🚀",
+        "endpoint": "/fii/<ticker>"
+    })
+
+
+# 🔥 rota principal
+@app.route("/fii/<ticker>")
+def fii(ticker):
+    data = get_fii_data(ticker)
+    return jsonify(data)
+
+
+# 🔥 RAILWAY / PRODUÇÃO
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
