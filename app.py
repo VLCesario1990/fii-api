@@ -1,8 +1,9 @@
 from flask import Flask, jsonify
 import requests
-from bs4 import BeautifulSoup
 import os
 import re
+import json
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -11,28 +12,37 @@ HEADERS = {
 }
 
 # =========================
-# 🔥 PEGAR DATA VIEW REAL
+# 🔥 EXTRAIR JSON NEXT.JS
 # =========================
-def get_vacancia_data_view(soup):
+def get_next_data(html):
     try:
-        # procura tabela que contém "Vacância Financeira"
-        tables = soup.find_all("table")
+        soup = BeautifulSoup(html, "html.parser")
 
-        for table in tables:
-            if "Vacância Financeira" in table.text:
+        script = soup.find("script", {"id": "__NEXT_DATA__"})
 
-                rows = table.find_all("tr")
+        if not script:
+            return None
 
-                # pega última linha (mais recente)
-                last_row = rows[-1].find_all("td")
+        return json.loads(script.string)
 
-                if len(last_row) >= 4:
-                    # coluna 4 = Vacância Financeira
-                    valor = last_row[3].text.strip()
+    except:
+        return None
 
-                    return valor.replace("%", "").strip()
 
-        return "N/D"
+# =========================
+# 🔥 VACÂNCIA REAL (JSON)
+# =========================
+def extract_vacancia_from_json(data):
+    try:
+        # navegação genérica (estrutura pode mudar)
+        text = json.dumps(data)
+
+        match = re.search(
+            r"Vac[âa]ncia Financeira[^0-9]*([0-9]+,[0-9]+|[0-9]+)",
+            text
+        )
+
+        return match.group(1) if match else "N/D"
 
     except:
         return "N/D"
@@ -50,17 +60,20 @@ def get_fii_data(ticker):
         if response.status_code != 200:
             return {"erro": "Erro ao acessar site"}
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        text = soup.get_text(" ", strip=True)
+        html = response.text
 
         # =========================
-        # 🎯 VACÂNCIA (DATA VIEW)
+        # 🎯 JSON REAL
         # =========================
-        vacancia = get_vacancia_data_view(soup)
+        next_data = get_next_data(html)
+
+        vacancia = extract_vacancia_from_json(next_data) if next_data else "N/D"
 
         # =========================
-        # 📊 INADIMPLÊNCIA
+        # 📊 INADIMPLÊNCIA (fallback)
         # =========================
+        text = re.sub(r"\s+", " ", html)
+
         inad_match = re.search(
             r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
             text
@@ -71,14 +84,14 @@ def get_fii_data(ticker):
         # =========================
         # 🏢 PORTFÓLIO
         # =========================
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", response.text)))
+        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
         return {
             "ticker": ticker.upper(),
             "vacancia": vacancia,
             "inadimplencia": inadimplencia,
             "portfolio": ativos[:10],
-            "fonte": "fundsexplorer_dataview"
+            "fonte": "fundsexplorer_nextjs"
         }
 
     except Exception as e:
@@ -96,7 +109,7 @@ def get_fii_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII (DATA VIEW REAL) 🚀"})
+    return jsonify({"status": "API FII (NEXT DATA) 🚀"})
 
 
 @app.route("/fii/<ticker>")
