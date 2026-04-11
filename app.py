@@ -12,7 +12,7 @@ HEADERS = {
 }
 
 # =========================
-# REQUEST SEGURO
+# REQUEST
 # =========================
 def safe_request(url):
     try:
@@ -26,7 +26,7 @@ def safe_request(url):
 
 
 # =========================
-# 🥇 MEUSDIVIDENDOS (CORRIGIDO)
+# 🥇 MEUSDIVIDENDOS
 # =========================
 def get_meusdividendos(ticker):
     try:
@@ -35,42 +35,39 @@ def get_meusdividendos(ticker):
 
         html = safe_request(url)
         if not html:
-            return None
+            return {}
 
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(" ", strip=True)
 
-        # 🔥 EXTRAÇÃO CORRETA
+        # VACÂNCIA
         vacancia_match = re.search(
             r"Vac[âa]ncia Financeira\s*([0-9]+,[0-9]+|[0-9]+)%",
             text
         )
 
+        # INADIMPLÊNCIA
         inad_match = re.search(
             r"Inadimpl[êe]ncia\s*([0-9]+,[0-9]+|[0-9]+)%",
             text
         )
 
-        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
-        inad = inad_match.group(1) if inad_match else "N/D"
+        vacancia = vacancia_match.group(1) if vacancia_match else None
+        inad = inad_match.group(1) if inad_match else None
 
-        # 🔥 PORTFÓLIO
+        # PORTFÓLIO
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
-        if vacancia != "N/D" or inad != "N/D" or len(ativos) > 0:
-            return {
-                "ticker": ticker.upper(),
-                "Vacância Financeira": vacancia,
-                "Inadimplência": inad,
-                "portfolio": ativos[:10],
-                "fonte": "meusdividendos"
-            }
-
-        return None
+        return {
+            "vacancia": vacancia,
+            "inadimplencia": inad,
+            "portfolio": ativos[:10],
+            "fonte_md": True
+        }
 
     except Exception as e:
-        print(f"Erro MeusDividendos: {e}")
-        return None
+        print("Erro MeusDividendos:", e)
+        return {}
 
 
 # =========================
@@ -82,38 +79,61 @@ def get_fundsexplorer(ticker):
 
         html = safe_request(url)
         if not html:
-            return None
+            return {}
 
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text()
 
+        # fallback (às vezes funciona)
         vacancia_match = re.search(
             r"Vac[âa]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
             text,
             re.DOTALL
         )
-        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
         inad_match = re.search(
             r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+|[0-9]+)%",
             text,
             re.DOTALL
         )
-        inad = inad_match.group(1) if inad_match else "N/D"
 
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
 
         return {
-            "ticker": ticker.upper(),
-            "vacancia": vacancia,
-            "inadimplencia": inad,
-            "portfolio": ativos[:10],
-            "fonte": "fundsexplorer"
+            "vacancia_fe": vacancia_match.group(1) if vacancia_match else None,
+            "inad_fe": inad_match.group(1) if inad_match else None,
+            "portfolio_fe": ativos[:10],
+            "fonte_fe": True
         }
 
     except Exception as e:
-        print(f"Erro FundsExplorer: {e}")
-        return None
+        print("Erro FundsExplorer:", e)
+        return {}
+
+
+# =========================
+# 🧠 MERGE INTELIGENTE
+# =========================
+def merge_data(ticker, md, fe):
+
+    return {
+        "ticker": ticker.upper(),
+
+        # 🔥 PRIORIDADE: MEUSDIVIDENDOS
+        "vacancia": md.get("vacancia") or fe.get("vacancia_fe") or "N/D",
+        "inadimplencia": md.get("inadimplencia") or fe.get("inad_fe") or "N/D",
+
+        # 🔥 PORTFÓLIO: junta os dois
+        "portfolio": list(set(
+            (md.get("portfolio") or []) +
+            (fe.get("portfolio_fe") or [])
+        ))[:10],
+
+        "fontes": {
+            "meusdividendos": md.get("fonte_md", False),
+            "fundsexplorer": fe.get("fonte_fe", False)
+        }
+    }
 
 
 # =========================
@@ -121,25 +141,10 @@ def get_fundsexplorer(ticker):
 # =========================
 def get_fii_data(ticker):
 
-    # 🥇 PRIORIDADE
-    data = get_meusdividendos(ticker)
-    if data:
-        print(f"✔ {ticker} → MEUSDIVIDENDOS")
-        return data
+    md = get_meusdividendos(ticker)
+    fe = get_fundsexplorer(ticker)
 
-    # 🥈 FALLBACK
-    data = get_fundsexplorer(ticker)
-    if data:
-        print(f"✔ {ticker} → FUNDSEXPLORER")
-        return data
-
-    return {
-        "ticker": ticker.upper(),
-        "vacancia": "N/D",
-        "inadimplencia": "N/D",
-        "portfolio": [],
-        "erro": "Nenhuma fonte respondeu"
-    }
+    return merge_data(ticker, md, fe)
 
 
 # =========================
@@ -147,7 +152,7 @@ def get_fii_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII rodando 🚀"})
+    return jsonify({"status": "API FII PRO rodando 🚀"})
 
 
 @app.route("/fii/<ticker>")
@@ -161,4 +166,3 @@ def fii(ticker):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-    
