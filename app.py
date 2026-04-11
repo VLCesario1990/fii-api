@@ -60,8 +60,8 @@ def get_meusdividendos(ticker):
         if vacancia != "N/D" or inad != "N/D" or len(ativos) > 0:
             return {
                 "ticker": ticker.upper(),
-                "vacancia": vacancia,
-                "inadimplencia": inad,
+                "Vacância Financeira": vacancia,
+                "Inadimplência": inad,
                 "portfolio": ativos[:10],
                 "fonte": "meusdividendos"
             }
