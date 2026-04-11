@@ -7,94 +7,138 @@ import re
 app = Flask(__name__)
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    "User-Agent": "Mozilla/5.0"
 }
 
-# 🔥 função principal
-def get_fii_data(ticker):
-    ticker = ticker.upper()
-
-    result = {
-        "ticker": ticker,
-        "vacancia": "N/D",
-        "inadimplencia": "N/D",
-        "portfolio": []
-    }
-
+# =========================================
+# 🔥 1. MEUSDIVIDENDOS (PRIORIDADE)
+# =========================================
+def get_meusdividendos(ticker):
     try:
-        url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
+        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker.lower()}"
         r = requests.get(url, headers=HEADERS, timeout=10)
 
-        # fallback caso bloqueie
         if r.status_code != 200:
-            return result
+            return None
 
         soup = BeautifulSoup(r.text, "html.parser")
         text = soup.get_text(" ", strip=True)
 
-        # =========================
-        # VACÂNCIA (mais robusto)
-        # =========================
-        vacancia_patterns = [
-            r"Vac[âa]ncia[^0-9]*([0-9,.]+)%",
-            r"Vacancy[^0-9]*([0-9,.]+)%"
-        ]
+        # VACÂNCIA
+        vacancia = "N/D"
+        vac_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
+        if vac_match:
+            vacancia = vac_match.group(1)
 
-        for pattern in vacancia_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                result["vacancia"] = match.group(1)
-                break
-
-        # =========================
         # INADIMPLÊNCIA
-        # =========================
-        inad_patterns = [
-            r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%",
-            r"Default[^0-9]*([0-9,.]+)%"
-        ]
+        inad = "N/D"
+        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
+        if inad_match:
+            inad = inad_match.group(1)
 
-        for pattern in inad_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                result["inadimplencia"] = match.group(1)
-                break
-
-        # =========================
-        # PORTFÓLIO (ativos reais)
-        # =========================
+        # PORTFÓLIO (FIIs dentro)
         ativos = re.findall(r"\b[A-Z]{4}\d{2}\b", r.text)
-        ativos_unicos = list(set(ativos))
+        ativos = list(set(ativos))
+        ativos = [a for a in ativos if a != ticker.upper()]
 
-        # remove o próprio ticker
-        ativos_unicos = [a for a in ativos_unicos if a != ticker]
+        return {
+            "vacancia": vacancia,
+            "inadimplencia": inad,
+            "portfolio": ativos[:10],
+            "fonte": "meusdividendos"
+        }
 
-        result["portfolio"] = ativos_unicos[:10]
-
-        return result
-
-    except Exception as e:
-        result["erro"] = str(e)
-        return result
+    except:
+        return None
 
 
-# 🔥 rota raiz
+# =========================================
+# 🔥 2. FUNDSEXPLORER (FALLBACK)
+# =========================================
+def get_fundsexplorer(ticker):
+    try:
+        url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+
+        if r.status_code != 200:
+            return None
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        text = soup.get_text(" ", strip=True)
+
+        vacancia = "N/D"
+        inad = "N/D"
+
+        vac_match = re.search(r"Vac[âa]ncia[^0-9]*([0-9,.]+)%", text)
+        if vac_match:
+            vacancia = vac_match.group(1)
+
+        inad_match = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,.]+)%", text)
+        if inad_match:
+            inad = inad_match.group(1)
+
+        ativos = re.findall(r"\b[A-Z]{4}\d{2}\b", r.text)
+        ativos = list(set(ativos))
+        ativos = [a for a in ativos if a != ticker.upper()]
+
+        return {
+            "vacancia": vacancia,
+            "inadimplencia": inad,
+            "portfolio": ativos[:10],
+            "fonte": "fundsexplorer"
+        }
+
+    except:
+        return None
+
+
+# =========================================
+# 🔥 3. FUNÇÃO PRINCIPAL (INTELIGENTE)
+# =========================================
+def get_fii_data(ticker):
+    ticker = ticker.upper()
+
+    resultado = {
+        "ticker": ticker,
+        "vacancia": "N/D",
+        "inadimplencia": "N/D",
+        "portfolio": [],
+        "fonte": "nenhuma"
+    }
+
+    # 🔥 1º tentativa → MEUSDIVIDENDOS
+    data = get_meusdividendos(ticker)
+    if data:
+        resultado.update(data)
+
+    # 🔥 fallback → FUNDSEXPLORER
+    if resultado["vacancia"] == "N/D" and resultado["inadimplencia"] == "N/D":
+        data = get_fundsexplorer(ticker)
+        if data:
+            resultado.update(data)
+
+    return resultado
+
+
+# =========================================
+# 🔥 ROTAS
+# =========================================
 @app.route("/")
 def home():
     return jsonify({
-        "status": "API FII rodando 🚀",
-        "endpoint": "/fii/<ticker>"
+        "status": "API FII PRO rodando 🚀",
+        "uso": "/fii/mxrf11"
     })
 
 
-# 🔥 rota principal
 @app.route("/fii/<ticker>")
 def fii(ticker):
-    data = get_fii_data(ticker)
-    return jsonify(data)
+    return jsonify(get_fii_data(ticker))
 
 
-# 🔥 RAILWAY / PRODUÇÃO
+# =========================================
+# 🔥 RAILWAY
+# =========================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
