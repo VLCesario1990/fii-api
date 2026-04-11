@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 app = Flask(__name__)
 
 # =========================
-# FUNDSEXPLORER (JS REAL)
+# FUNDSEXPLORER (JS + DATA VIEW)
 # =========================
 async def get_fundsexplorer_data(ticker):
     try:
@@ -19,24 +19,33 @@ async def get_fundsexplorer_data(ticker):
 
             await page.goto(url, timeout=60000)
 
-            # ⏳ espera carregar gráfico
-            await page.wait_for_timeout(6000)
+            # ⏳ espera carregar
+            await page.wait_for_timeout(5000)
+
+            # 🔥 TENTA ABRIR DATA VIEW (se existir botão)
+            try:
+                await page.click("text=Data View", timeout=3000)
+                await page.wait_for_timeout(2000)
+            except:
+                pass
 
             content = await page.content()
             await browser.close()
 
-        # 🔥 TEXTO COMPLETO
         text = re.sub(r"\s+", " ", content)
 
         # =========================
-        # VACÂNCIA
+        # VACÂNCIA FINANCEIRA (último valor da tabela)
         # =========================
-        vacancia_match = re.search(
-            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
+        matches = re.findall(
+            r"Vac[âa]ncia Financeira[^0-9]*([0-9]+\.?[0-9]*)",
             text
         )
 
-        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
+        if matches:
+            vacancia = matches[-1]  # último mês
+        else:
+            vacancia = "N/D"
 
         # =========================
         # INADIMPLÊNCIA
@@ -49,7 +58,7 @@ async def get_fundsexplorer_data(ticker):
         inadimplencia = inad_match.group(1) if inad_match else "N/D"
 
         # =========================
-        # PORTFÓLIO (tickers dentro da página)
+        # PORTFÓLIO
         # =========================
         ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", content)))
 
@@ -58,7 +67,7 @@ async def get_fundsexplorer_data(ticker):
             "vacancia": vacancia,
             "inadimplencia": inadimplencia,
             "portfolio": ativos[:10],
-            "fonte": "fundsexplorer"
+            "fonte": "fundsexplorer_data_view"
         }
 
     except Exception as e:
@@ -77,7 +86,7 @@ async def get_fundsexplorer_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII (FundsExplorer JS) 🚀"})
+    return jsonify({"status": "API FII (Data View real) 🚀"})
 
 
 @app.route("/fii/<ticker>")
