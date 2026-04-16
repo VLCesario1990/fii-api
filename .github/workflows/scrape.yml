@@ -18,6 +18,7 @@ jobs:
 
       - name: Instalar dependências
         run: pip install -r requirements.txt
+             playwright install --with-deps
 
       - name: Rodar scraper
         run: python scraper.py
