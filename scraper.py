@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import os
 from playwright.async_api import async_playwright
 
 TICKERS = ["xpml11", "mxrf11", "tepp11"]
@@ -46,7 +47,8 @@ async def main():
     for t in TICKERS:
         print("Coletando:", t)
         result[t] = await get_data(t)
-
+    
+    os.makedirs("data", exist_ok=True)
     with open("data/fii.json", "w") as f:
         json.dump(result, f, indent=2)
 
