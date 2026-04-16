@@ -8,7 +8,6 @@ HEADERS = {
 }
 
 def get_data(ticker):
-    ticker = ticker.upper()
     url = f"https://statusinvest.com.br/fundos-imobiliarios/{ticker.lower()}"
 
     print("\n==========================")
@@ -25,13 +24,16 @@ def get_data(ticker):
 
         html = r.text
 
-        # 🔥 VACÂNCIA
         vacancia = "N/D"
 
-        if "Vacância" in html:
-            match = re.search(r"Vacância[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", html)
-            if match:
-                vacancia = match.group(1)
+        # 🔥 REGEX MAIS FORTE
+        match = re.search(
+            r"Vacância[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
+            html
+        )
+
+        if match:
+            vacancia = match.group(1)
 
         print("Vacância:", vacancia)
 
@@ -55,10 +57,9 @@ def main():
     print("\n📊 RESULTADO FINAL:")
     print(json.dumps(resultado, indent=2))
 
-    # 🔥 CRIA PASTA (RESOLVE SEU ERRO)
+    # 🔥 RESOLVE SEU ERRO DEFINITIVAMENTE
     os.makedirs("data", exist_ok=True)
 
-    # 🔥 SALVA JSON
     with open("data/fii.json", "w") as f:
         json.dump(resultado, f, indent=2)
 
