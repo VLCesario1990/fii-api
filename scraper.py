@@ -30,15 +30,15 @@ async def get_vacancia(ticker):
         """)
 
         try:
-            await page.goto(url, timeout=60000)
+            await page.goto(url, timeout=90000)
 
             # simular comportamento humano
-            await page.mouse.move(100, 200)
-            await page.wait_for_timeout(2000)
+            await page.mouse.move(500, 900)
+            await page.wait_for_timeout(5000)
 
             # esperar carregar JS
             await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(10000)
+            await page.wait_for_timeout(50000)
 
             # DEBUG HTML
             html = await page.content()
