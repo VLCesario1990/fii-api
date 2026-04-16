@@ -1,43 +1,74 @@
-import asyncio
+import requests
 import re
-from playwright.async_api import async_playwright
 
-async def get_data(ticker):
-    ticker_base = ticker.replace("11", "").lower()
-    url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+def get_fii_data(ticker):
+    url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
 
     print("\n==========================")
     print(f"🔎 TICKER: {ticker}")
     print(f"🌐 URL: {url}")
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
 
-        await page.goto(url, timeout=60000)
+        print(f"📡 Status: {r.status_code}")
 
-        # espera carregar
-        await page.wait_for_timeout(6000)
+        if r.status_code != 200:
+            print("❌ Erro ao acessar")
+            return {
+                "vacancia": "N/D",
+                "inadimplencia": "N/D",
+                "portfolio": []
+            }
 
-        html = await page.content()
+        html = r.text
 
-        print("📄 HTML carregado:")
+        print("📄 HTML (inicio):")
         print(html[:500])
 
-        await browser.close()
+        text = re.sub(r"\s+", " ", html)
 
-    text = re.sub(r"\s+", " ", html)
+        # =========================
+        # VACÂNCIA
+        # =========================
+        vac = re.search(r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text)
+        vacancia = vac.group(1) if vac else "N/D"
 
-    vac = re.search(r"Vac[âa]ncia Financeira.*?([0-9]+,[0-9]+)%", text)
-    inad = re.search(r"Inadimpl[êe]ncia.*?([0-9]+,[0-9]+)%", text)
+        # =========================
+        # INADIMPLÊNCIA
+        # =========================
+        inad = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text)
+        inadimplencia = inad.group(1) if inad else "N/D"
 
-    return {
-        "vacancia": vac.group(1) if vac else "N/D",
-        "inadimplencia": inad.group(1) if inad else "N/D"
-    }
+        # =========================
+        # PORTFÓLIO (tickers)
+        # =========================
+        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
+
+        print(f"📊 Vacância: {vacancia}")
+        print(f"📊 Inadimplência: {inadimplencia}")
+        print(f"🏢 Portfolio: {len(ativos)} ativos")
+
+        return {
+            "vacancia": vacancia,
+            "inadimplencia": inadimplencia,
+            "portfolio": ativos[:10]
+        }
+
+    except Exception as e:
+        print("❌ ERRO:", e)
+        return {
+            "vacancia": "N/D",
+            "inadimplencia": "N/D",
+            "portfolio": []
+        }
 
 
-async def main():
+def main():
     tickers = ["xpml11", "mxrf11", "tepp11"]
 
     """
@@ -69,11 +100,11 @@ async def main():
     resultado = {}
 
     for t in tickers:
-        data = await get_data(t)
-        resultado[t] = data
+        resultado[t] = get_fii_data(t)
 
     print("\n✅ RESULTADO FINAL:")
     print(resultado)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    main()
