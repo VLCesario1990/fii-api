@@ -1,74 +1,65 @@
-import requests
+import asyncio
 import re
+from playwright.async_api import async_playwright
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-def get_fii_data(ticker):
+async def get_vacancia(ticker):
     url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
 
     print("\n==========================")
-    print(f"🔎 TICKER: {ticker}")
-    print(f"🌐 URL: {url}")
+    print(f"🔎 {ticker}")
+    print(f"🌐 {url}")
 
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
 
-        print(f"📡 Status: {r.status_code}")
+        await page.goto(url, timeout=60000)
 
-        if r.status_code != 200:
-            print("❌ Erro ao acessar")
-            return {
-                "vacancia": "N/D",
-                "inadimplencia": "N/D",
-                "portfolio": []
-            }
+        # ⏳ esperar gráfico carregar
+        await page.wait_for_timeout(8000)
 
-        html = r.text
+        try:
+            # 🔥 pega o textarea do data view
+            textarea = await page.query_selector("#vacancia-chart textarea")
 
-        print("📄 HTML (inicio):")
-        print(html[:500])
+            if not textarea:
+                print("❌ textarea não encontrado")
+                return "N/D"
 
-        text = re.sub(r"\s+", " ", html)
+            content = await textarea.input_value()
 
-        # =========================
-        # VACÂNCIA
-        # =========================
-        vac = re.search(r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text)
-        vacancia = vac.group(1) if vac else "N/D"
+            print("\n📄 DATA VIEW:")
+            print(content[:300])
 
-        # =========================
-        # INADIMPLÊNCIA
-        # =========================
-        inad = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text)
-        inadimplencia = inad.group(1) if inad else "N/D"
+            # =========================
+            # PEGAR ÚLTIMA LINHA
+            # =========================
+            linhas = content.strip().split("\n")
 
-        # =========================
-        # PORTFÓLIO (tickers)
-        # =========================
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
+            ultima = linhas[-1]
 
-        print(f"📊 Vacância: {vacancia}")
-        print(f"📊 Inadimplência: {inadimplencia}")
-        print(f"🏢 Portfolio: {len(ativos)} ativos")
+            print(f"\n📊 Última linha: {ultima}")
 
-        return {
-            "vacancia": vacancia,
-            "inadimplencia": inadimplencia,
-            "portfolio": ativos[:10]
-        }
+            # pegar último número (vacância financeira)
+            valores = re.findall(r"[0-9]+\.?[0-9]*", ultima)
 
-    except Exception as e:
-        print("❌ ERRO:", e)
-        return {
-            "vacancia": "N/D",
-            "inadimplencia": "N/D",
-            "portfolio": []
-        }
+            if len(valores) >= 4:
+                vacancia = valores[-1]
+            else:
+                vacancia = "N/D"
+
+            print(f"✅ Vacância: {vacancia}")
+
+            await browser.close()
+            return vacancia
+
+        except Exception as e:
+            print("❌ ERRO:", e)
+            await browser.close()
+            return "N/D"
 
 
-def main():
+async def main():
     tickers = ["xpml11", "mxrf11", "tepp11"]
 
     """
@@ -97,14 +88,8 @@ def main():
     "XPML","XPSF","YUFI","ZAGH","GGRC","ZAVC","ZAVI","ZIFI"]
     """
 
-    resultado = {}
-
     for t in tickers:
-        resultado[t] = get_fii_data(t)
-
-    print("\n✅ RESULTADO FINAL:")
-    print(resultado)
+        await get_vacancia(t)
 
 
-if __name__ == "__main__":
-    main()
+asyncio.run(main())
