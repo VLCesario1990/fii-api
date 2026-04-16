@@ -1,46 +1,47 @@
 import requests
 import json
 import os
+import re
 
-def get_fii_data(ticker):
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+def get_data(ticker):
     ticker = ticker.upper()
-
     url = f"https://statusinvest.com.br/fundos-imobiliarios/{ticker.lower()}"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
 
     print("\n==========================")
     print(f"🔎 {ticker}")
     print(f"🌐 {url}")
 
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=HEADERS, timeout=10)
+
+        print("Status:", r.status_code)
 
         if r.status_code != 200:
-            return {"erro": "Erro ao acessar"}
+            return {"vacancia": "N/D"}
 
         html = r.text
 
-        # =========================
-        # VACÂNCIA (REGEX ROBUSTO)
-        # =========================
+        # 🔥 VACÂNCIA
         vacancia = "N/D"
 
         if "Vacância" in html:
-            import re
             match = re.search(r"Vacância[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", html)
             if match:
                 vacancia = match.group(1)
 
+        print("Vacância:", vacancia)
+
         return {
-            "ticker": ticker,
             "vacancia": vacancia
         }
 
     except Exception as e:
-        return {"erro": str(e)}
+        print("Erro:", e)
+        return {"vacancia": "N/D"}
 
 
 def main():
@@ -49,15 +50,19 @@ def main():
     resultado = {}
 
     for t in tickers:
-        resultado[t] = get_fii_data(t)
+        resultado[t] = get_data(t)
 
     print("\n📊 RESULTADO FINAL:")
     print(json.dumps(resultado, indent=2))
 
+    # 🔥 CRIA PASTA (RESOLVE SEU ERRO)
     os.makedirs("data", exist_ok=True)
 
+    # 🔥 SALVA JSON
     with open("data/fii.json", "w") as f:
         json.dump(resultado, f, indent=2)
+
+    print("✅ JSON salvo com sucesso")
 
 
 if __name__ == "__main__":
