@@ -1,103 +1,103 @@
-import asyncio
-import re
+import requests
+from bs4 import BeautifulSoup
 import json
-from playwright.async_api import async_playwright
+import os
+import re
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
 
 
-async def get_vacancia(ticker):
-    url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
+def get_data(ticker):
+    ticker_clean = ticker.replace("11", "").lower()
+    url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_clean}"
 
     print("\n==========================")
     print(f"🔎 TICKER: {ticker}")
     print(f"🌐 URL: {url}")
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
 
-        # 🔥 CONTEXTO "HUMANO"
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 720}
-        )
+        print(f"📡 Status: {response.status_code}")
 
-        page = await context.new_page()
+        if response.status_code != 200:
+            return {
+                "vacancia": "N/D",
+                "inadimplencia": "N/D",
+                "portfolio": []
+            }
 
-        # 🔥 esconder webdriver
-        await page.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        """)
+        soup = BeautifulSoup(response.text, "html.parser")
 
-        try:
-            await page.goto(url, timeout=90000)
+        # =========================
+        # VACÂNCIA
+        # =========================
+        vacancia = "N/D"
+        spans = soup.select("span.converter-percentual")
 
-            # simular comportamento humano
-            await page.mouse.move(500, 900)
-            await page.wait_for_timeout(5000)
+        print(f"🧠 spans encontrados: {len(spans)}")
 
-            # esperar carregar JS
-            await page.wait_for_load_state("networkidle")
-            await page.wait_for_timeout(50000)
+        for s in spans:
+            texto = s.get_text(strip=True)
+            print(f"➡️ span: {texto}")
 
-            # DEBUG HTML
-            html = await page.content()
-            print("\n📄 HTML (inicio):")
-            print(html[:500])
+            if "%" in texto:
+                vacancia = texto.replace("%", "").strip()
+                break
 
-            # 🔥 pegar TODOS textareas
-            textareas = await page.query_selector_all("textarea")
+        # =========================
+        # PORTFÓLIO
+        # =========================
+        portfolio = []
 
-            print(f"\n🧠 Encontrados {len(textareas)} textarea(s)")
+        linhas = soup.select("table tr")
 
-            for i, ta in enumerate(textareas):
-                content = await ta.input_value()
+        for l in linhas:
+            tds = l.find_all("td")
+            if len(tds) >= 2:
+                nome = tds[0].get_text(strip=True)
+                if nome:
+                    portfolio.append(nome)
 
-                print(f"\n📄 TEXTAREA {i}:")
-                print(content[:300])
+        print(f"🏢 Portfolio encontrados: {len(portfolio)}")
 
-                if "%" in content:
-                    linhas = content.strip().split("\n")
-                    ultima = linhas[-1]
+        return {
+            "vacancia": vacancia,
+            "inadimplencia": "N/D",
+            "portfolio": portfolio[:10]
+        }
 
-                    valores = re.findall(r"[0-9]+\.?[0-9]*", ultima)
-
-                    if valores:
-                        vacancia = valores[-1]
-                        print(f"✅ Vacância encontrada: {vacancia}")
-
-                        await browser.close()
-                        return vacancia
-
-            print("❌ Nenhum textarea válido encontrado")
-            await browser.close()
-            return "N/D"
-
-        except Exception as e:
-            print("❌ ERRO:", str(e))
-            await browser.close()
-            return "N/D"
+    except Exception as e:
+        print("❌ ERRO:", str(e))
+        return {
+            "vacancia": "N/D",
+            "inadimplencia": "N/D",
+            "portfolio": []
+        }
 
 
-async def main():
+def main():
     tickers = ["xpml11", "mxrf11", "tepp11"]
 
     resultado = {}
 
     for t in tickers:
-        vacancia = await get_vacancia(t)
-
-        resultado[t] = {
-            "vacancia": vacancia
-        }
+        resultado[t] = get_data(t)
 
     print("\n📊 RESULTADO FINAL:")
     print(json.dumps(resultado, indent=2))
 
-    # 🔥 salvar JSON
+    # 🔥 GARANTE PASTA
+    os.makedirs("data", exist_ok=True)
+
+    # 🔥 SALVA JSON
     with open("data/fii.json", "w") as f:
         json.dump(resultado, f, indent=2)
 
+    print("✅ JSON salvo com sucesso")
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
