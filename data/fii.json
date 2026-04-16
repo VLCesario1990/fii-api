@@ -1,0 +1,23 @@
+{
+  "xpml11": {
+    "vacancia": "N/D",
+    "inadimplencia": "N/D",
+    "portfolio": [
+      "NNIH84",
+      "OLSF34"
+    ]
+  },
+  "mxrf11": {
+    "vacancia": "N/D",
+    "inadimplencia": "N/D",
+    "portfolio": [
+      "MJAA81",
+      "SYAD21"
+    ]
+  },
+  "tepp11": {
+    "vacancia": "N/D",
+    "inadimplencia": "N/D",
+    "portfolio": []
+  }
+}
