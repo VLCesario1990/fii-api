@@ -1,27 +1,94 @@
+from flask import Flask, jsonify
 import requests
 from bs4 import BeautifulSoup
+import os
 import re
 
-def testar_fii(ticker):
-    url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
-    response = requests.get(url)
+app = Flask(__name__)
 
-    print(f"\n🔎 TESTANDO: {ticker}")
-    print("Status:", response.status_code)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    text = soup.get_text(" ", strip=True)
+def get_meusdividendos(ticker):
+    try:
+        ticker_base = ticker.replace("11", "").lower()
 
-    print("\n📄 INICIO DO HTML:")
-    print(text[:500])
+        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
+        response = requests.get(url, headers=HEADERS, timeout=10)
 
-    vacancia = re.search(r"Vac[âa]ncia[^0-9]*([0-9,]+)%", text)
-    inad = re.search(r"Inadimpl[êe]ncia[^0-9]*([0-9,]+)%", text)
+        if response.status_code != 200:
+            return {"erro": f"HTTP {response.status_code}"}
 
-    print("\n📊 RESULTADO:")
-    print("Vacância:", vacancia.group(1) if vacancia else "N/D")
-    print("Inadimplência:", inad.group(1) if inad else "N/D")
+        soup = BeautifulSoup(response.text, "html.parser")
 
+        # =========================
+        # 🏢 PORTFÓLIO (TABELA)
+        # =========================
+        portfolio = []
+        vacancias = []
+        inads = []
 
-# 👇 TESTA AQUI
-testar_fii("xpml11")
+        rows = soup.find_all("tr")
+
+        for row in rows:
+            cols = row.find_all("td")
+
+            if len(cols) >= 6:
+                nome = cols[0].get_text(strip=True)
+                vac = cols[3].get_text(strip=True)
+                inad = cols[4].get_text(strip=True)
+
+                # tenta extrair ticker do nome
+                ticker_match = re.search(r"[A-Z]{4}\d{2}", nome)
+
+                if ticker_match:
+                    portfolio.append(ticker_match.group(0))
+
+                # guarda vacâncias válidas
+                if "%" in vac:
+                    vacancias.append(vac.replace("%", "").strip())
+
+                if "%" in inad:
+                    inads.append(inad.replace("%", "").strip())
+
+        # =========================
+        # 📊 AGREGAÇÃO
+        # =========================
+        vacancia = vacancias[0] if vacancias else "N/D"
+        inadimplencia = inads[0] if inads else "N/D"
+
+        return {
+            "ticker": ticker.upper(),
+            "vacancia": vacancia,
+            "inadimplencia": inadimplencia,
+            "portfolio": list(set(portfolio))[:10],
+            "fonte": "meusdividendos"
+        }
+
+    except Exception as e:
+        return {
+            "erro": str(e)
+        }
+
+# =========================
+# ROTAS
+# =========================
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "API MeusDividendos rodando 🚀",
+        "teste": "/fii/tepp11"
+    })
+
+@app.route("/fii/<ticker>")
+def fii(ticker):
+    return jsonify(get_meusdividendos(ticker))
+
+# =========================
+# RAILWAY
+# =========================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+    
