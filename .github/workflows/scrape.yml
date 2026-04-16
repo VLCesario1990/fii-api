@@ -1,9 +1,7 @@
 name: Scraper FII
 
 on:
-  workflow_dispatch:   # botão manual
-  schedule:
-    - cron: "0 12 * * *"
+  workflow_dispatch:
 
 jobs:
   run:
@@ -19,9 +17,7 @@ jobs:
           python-version: "3.11"
 
       - name: Instalar dependências
-        run: |
-          pip install -r requirements.txt
-          playwright install --with-deps
+        run: pip install -r requirements.txt
 
       - name: Rodar scraper
         run: python scraper.py
