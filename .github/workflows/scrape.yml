@@ -2,8 +2,12 @@ name: Atualizar FIIs
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # a cada 6 horas
+    - cron: "0 */6 * * *"
   workflow_dispatch:
+
+# 🔥 PERMISSÃO PRA FAZER PUSH
+permissions:
+  contents: write
 
 jobs:
   scrape:
@@ -18,7 +22,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar dependências
+      - name: Instalar Playwright
         run: |
           pip install playwright
           playwright install chromium
