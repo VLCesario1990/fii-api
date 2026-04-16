@@ -1,17 +1,21 @@
 import asyncio
 import json
-import re
 import os
 from playwright.async_api import async_playwright
 
+# 🔥 TICKERS QUE SERÃO COLETADOS
 TICKERS = ["xpml11", "mxrf11", "tepp11"]
 
+
+# =========================
+# 🔥 SCRAPER PRINCIPAL
+# =========================
 async def get_data(ticker):
     try:
         ticker_base = ticker.replace("11", "")
         url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
 
-        print("\n============================")
+        print("\n========================")
         print("🔎 TICKER:", ticker)
         print("🌐 URL:", url)
 
@@ -22,65 +26,42 @@ async def get_data(ticker):
             await page.goto(url, timeout=60000)
             await page.wait_for_timeout(6000)
 
-            content = await page.content()
+            # =========================
+            # 🎯 VACÂNCIA (XPATH)
+            # =========================
+            vacancia = "N/D"
+            try:
+                vacancia_el = page.locator(
+                    "xpath=/html/body/div[2]/div/section[2]/div/div[2]/div[3]/div[2]/div/div[1]/div/div[3]/div/div[1]/div/div/span"
+                )
+                vacancia_text = await vacancia_el.inner_text()
+                vacancia = vacancia_text.replace("%", "").strip()
+
+                print("✅ Vacância:", vacancia)
+            except:
+                print("❌ Vacância não encontrada")
+
+            # =========================
+            # 🎯 INADIMPLÊNCIA (XPATH)
+            # =========================
+            inad = "N/D"
+            try:
+                inad_el = page.locator(
+                    "xpath=/html/body/div[2]/div/section[2]/div/div[2]/div[3]/div[2]/div/div[1]/div/div[3]/div/div[2]/div/div/span"
+                )
+                inad_text = await inad_el.inner_text()
+                inad = inad_text.replace("%", "").strip()
+
+                print("✅ Inadimplência:", inad)
+            except:
+                print("❌ Inadimplência não encontrada")
+
             await browser.close()
-
-        # 🔥 DEBUG HTML
-        print("\n📄 HTML (inicio):")
-        print(content[:500])
-
-        # 🔥 TEXTO LIMPO
-        text = re.sub(r"\s+", " ", content)
-
-        print("\n🧠 TEXTO LIMPO (inicio):")
-        print(text[:500])
-
-        # 🔍 TESTES DE EXISTÊNCIA
-        print("\n🔍 CHECKS:")
-        print("Tem 'Vacância'? ->", "Vacância" in text)
-        print("Tem 'Inadimplência'? ->", "Inadimplência" in text)
-
-        # =========================
-        # VACÂNCIA
-        # =========================
-        vacancia = "N/D"
-        v = re.search(
-            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
-            text
-        )
-
-        if v:
-            vacancia = v.group(1)
-            print("✅ Vacância encontrada:", vacancia)
-        else:
-            print("❌ Vacância NÃO encontrada")
-
-        # =========================
-        # INADIMPLÊNCIA
-        # =========================
-        inad = "N/D"
-        i = re.search(
-            r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
-            text
-        )
-
-        if i:
-            inad = i.group(1)
-            print("✅ Inadimplência encontrada:", inad)
-        else:
-            print("❌ Inadimplência NÃO encontrada")
-
-        # =========================
-        # PORTFÓLIO
-        # =========================
-        portfolio = list(set(re.findall(r"[A-Z]{4}\d{2}", content)))
-
-        print("\n📊 Portfolio encontrado:", portfolio[:10])
 
         return {
             "vacancia": vacancia,
             "inadimplencia": inad,
-            "portfolio": portfolio[:10]
+            "portfolio": []
         }
 
     except Exception as e:
@@ -93,14 +74,19 @@ async def get_data(ticker):
         }
 
 
+# =========================
+# 🔥 MAIN
+# =========================
 async def main():
     result = {}
 
     for t in TICKERS:
         result[t] = await get_data(t)
 
+    # 🔥 cria pasta se não existir
     os.makedirs("data", exist_ok=True)
 
+    # 🔥 salva JSON
     with open("data/fii.json", "w") as f:
         json.dump(result, f, indent=2)
 
@@ -108,4 +94,7 @@ async def main():
     print(json.dumps(result, indent=2))
 
 
+# =========================
+# RUN
+# =========================
 asyncio.run(main())
