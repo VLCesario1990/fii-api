@@ -1,97 +1,81 @@
 from flask import Flask, jsonify
-import requests
 import os
-import re
-import json
-from bs4 import BeautifulSoup
+import asyncio
+from playwright.async_api import async_playwright
 
 app = Flask(__name__)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+# =========================
+# CONFIG
+# =========================
+HEADLESS = True
+
 
 # =========================
-# 🔥 EXTRAIR JSON NEXT.JS
+# SCRAPER MEUSDIVIDENDOS (JS)
 # =========================
-def get_next_data(html):
+async def get_fii_data(ticker):
     try:
-        soup = BeautifulSoup(html, "html.parser")
+        ticker_base = ticker.replace("11", "").lower()
+        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
 
-        script = soup.find("script", {"id": "__NEXT_DATA__"})
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=HEADLESS)
+            page = await browser.new_page()
 
-        if not script:
-            return None
+            await page.goto(url, timeout=60000)
 
-        return json.loads(script.string)
+            # ⏳ espera carregar
+            await page.wait_for_timeout(5000)
 
-    except:
-        return None
+            # =========================
+            # VACÂNCIA
+            # =========================
+            vacancia = "N/D"
+            try:
+                vacancia = await page.locator(
+                    "text=Vacância Financeira"
+                ).locator("xpath=../span").inner_text()
 
+                vacancia = vacancia.replace("%", "").strip()
+            except:
+                pass
 
-# =========================
-# 🔥 VACÂNCIA REAL (JSON)
-# =========================
-def extract_vacancia_from_json(data):
-    try:
-        # navegação genérica (estrutura pode mudar)
-        text = json.dumps(data)
+            # =========================
+            # INADIMPLÊNCIA
+            # =========================
+            inad = "N/D"
+            try:
+                inad = await page.locator(
+                    "text=Inadimplência"
+                ).locator("xpath=../span").inner_text()
 
-        match = re.search(
-            r"Vac[âa]ncia Financeira[^0-9]*([0-9]+,[0-9]+|[0-9]+)",
-            text
-        )
+                inad = inad.replace("%", "").strip()
+            except:
+                pass
 
-        return match.group(1) if match else "N/D"
+            # =========================
+            # PORTFÓLIO (imóveis)
+            # =========================
+            ativos = []
+            try:
+                rows = page.locator("table tbody tr")
+                count = await rows.count()
 
-    except:
-        return "N/D"
+                for i in range(min(count, 10)):
+                    nome = await rows.nth(i).locator("td").nth(0).inner_text()
+                    ativos.append(nome.strip())
+            except:
+                pass
 
-
-# =========================
-# 🔥 FUNÇÃO PRINCIPAL
-# =========================
-def get_fii_data(ticker):
-    try:
-        url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
-
-        response = requests.get(url, headers=HEADERS, timeout=10)
-
-        if response.status_code != 200:
-            return {"erro": "Erro ao acessar site"}
-
-        html = response.text
-
-        # =========================
-        # 🎯 JSON REAL
-        # =========================
-        next_data = get_next_data(html)
-
-        vacancia = extract_vacancia_from_json(next_data) if next_data else "N/D"
-
-        # =========================
-        # 📊 INADIMPLÊNCIA (fallback)
-        # =========================
-        text = re.sub(r"\s+", " ", html)
-
-        inad_match = re.search(
-            r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%",
-            text
-        )
-
-        inadimplencia = inad_match.group(1) if inad_match else "N/D"
-
-        # =========================
-        # 🏢 PORTFÓLIO
-        # =========================
-        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", html)))
+            await browser.close()
 
         return {
             "ticker": ticker.upper(),
             "vacancia": vacancia,
-            "inadimplencia": inadimplencia,
-            "portfolio": ativos[:10],
-            "fonte": "fundsexplorer_nextjs"
+            "inadimplencia": inad,
+            "portfolio": ativos,
+            "fonte": "meusdividendos_js"
         }
 
     except Exception as e:
@@ -109,12 +93,16 @@ def get_fii_data(ticker):
 # =========================
 @app.route("/")
 def home():
-    return jsonify({"status": "API FII (NEXT DATA) 🚀"})
+    return jsonify({
+        "status": "API FII rodando 🚀",
+        "uso": "/fii/xpml11"
+    })
 
 
 @app.route("/fii/<ticker>")
 def fii(ticker):
-    return jsonify(get_fii_data(ticker))
+    data = asyncio.run(get_fii_data(ticker))
+    return jsonify(data)
 
 
 # =========================
