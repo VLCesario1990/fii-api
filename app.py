@@ -1,113 +1,62 @@
 from flask import Flask, jsonify
+import requests
+from bs4 import BeautifulSoup
 import os
-import asyncio
-from playwright.async_api import async_playwright
+import re
 
 app = Flask(__name__)
 
-# =========================
-# CONFIG
-# =========================
-HEADLESS = True
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-
-# =========================
-# SCRAPER MEUSDIVIDENDOS (JS)
-# =========================
-async def get_fii_data(ticker):
+def get_fii_data(ticker):
     try:
-        ticker_base = ticker.replace("11", "").lower()
-        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
+        url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
+        response = requests.get(url, headers=HEADERS, timeout=10)
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=HEADLESS)
-            page = await browser.new_page()
+        if response.status_code != 200:
+            return {"erro": "Erro ao acessar"}
 
-            await page.goto(url, timeout=60000)
+        soup = BeautifulSoup(response.text, "html.parser")
+        text = soup.get_text(" ", strip=True)
 
-            # ⏳ espera carregar
-            await page.wait_for_timeout(5000)
+        # VACÂNCIA
+        vacancia_match = re.search(
+            r"Vac[âa]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text
+        )
+        vacancia = vacancia_match.group(1) if vacancia_match else "N/D"
 
-            # =========================
-            # VACÂNCIA
-            # =========================
-            vacancia = "N/D"
-            try:
-                vacancia = await page.locator(
-                    "text=Vacância Financeira"
-                ).locator("xpath=../span").inner_text()
+        # INADIMPLÊNCIA
+        inad_match = re.search(
+            r"Inadimpl[êe]ncia[^0-9]*([0-9]+,[0-9]+|[0-9]+)%", text
+        )
+        inad = inad_match.group(1) if inad_match else "N/D"
 
-                vacancia = vacancia.replace("%", "").strip()
-            except:
-                pass
-
-            # =========================
-            # INADIMPLÊNCIA
-            # =========================
-            inad = "N/D"
-            try:
-                inad = await page.locator(
-                    "text=Inadimplência"
-                ).locator("xpath=../span").inner_text()
-
-                inad = inad.replace("%", "").strip()
-            except:
-                pass
-
-            # =========================
-            # PORTFÓLIO (imóveis)
-            # =========================
-            ativos = []
-            try:
-                rows = page.locator("table tbody tr")
-                count = await rows.count()
-
-                for i in range(min(count, 10)):
-                    nome = await rows.nth(i).locator("td").nth(0).inner_text()
-                    ativos.append(nome.strip())
-            except:
-                pass
-
-            await browser.close()
+        # PORTFÓLIO
+        ativos = list(set(re.findall(r"[A-Z]{4}\d{2}", response.text)))
 
         return {
             "ticker": ticker.upper(),
             "vacancia": vacancia,
             "inadimplencia": inad,
-            "portfolio": ativos,
-            "fonte": "meusdividendos_js"
+            "portfolio": ativos[:10],
+            "fonte": "fundsexplorer"
         }
 
     except Exception as e:
         return {
-            "ticker": ticker.upper(),
-            "vacancia": "N/D",
-            "inadimplencia": "N/D",
-            "portfolio": [],
             "erro": str(e)
         }
 
-
-# =========================
-# ROTAS
-# =========================
 @app.route("/")
 def home():
-    return jsonify({
-        "status": "API FII rodando 🚀",
-        "uso": "/fii/xpml11"
-    })
-
+    return jsonify({"status": "API FII rodando 🚀"})
 
 @app.route("/fii/<ticker>")
 def fii(ticker):
-    data = asyncio.run(get_fii_data(ticker))
-    return jsonify(data)
+    return jsonify(get_fii_data(ticker))
 
-
-# =========================
-# RAILWAY
-# =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
