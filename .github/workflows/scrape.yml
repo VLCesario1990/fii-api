@@ -1,16 +1,10 @@
 name: Atualizar FIIs
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"
   workflow_dispatch:
 
-# 🔥 PERMISSÃO PRA FAZER PUSH
-permissions:
-  contents: write
-
 jobs:
-  scrape:
+  run:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,16 +18,8 @@ jobs:
 
       - name: Instalar Playwright
         run: |
-          pip install playwright
+          pip install -r requirements.txt
           playwright install chromium
 
-      - name: Rodar scraping
+      - name: Rodar scraper
         run: python scraper.py
-
-      - name: Commit JSON
-        run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@github.com"
-          git add data/fii.json
-          git commit -m "update fii data" || echo "sem mudanças"
-          git push
