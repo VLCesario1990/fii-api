@@ -3,58 +3,64 @@ import json
 import os
 from playwright.async_api import async_playwright
 
-# 🔥 TICKERS QUE SERÃO COLETADOS
-TICKERS = ["xpml11", "mxrf11", "tepp11"]
+TICKERS = ["xpml11", "mxrf11", "tepp11", "xpml11"]
 
 
 # =========================
-# 🔥 SCRAPER PRINCIPAL
+# 🔥 SCRAPER COM DEBUG
 # =========================
 async def get_data(ticker):
     try:
-        ticker_base = ticker.replace("11", "")
+        ticker_base = ticker.replace("11", "").lower()
         url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
 
-        print("\n========================")
-        print("🔎 TICKER:", ticker)
-        print("🌐 URL:", url)
+        print("\n============================")
+        print(f"🔎 TICKER: {ticker}")
+        print(f"🌐 URL: {url}")
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
 
+            print("⏳ Acessando página...")
             await page.goto(url, timeout=60000)
+
+            # espera JS carregar
             await page.wait_for_timeout(6000)
 
+            html = await page.content()
+            print(f"📄 HTML carregado ({len(html)} chars)")
+
             # =========================
-            # 🎯 VACÂNCIA (XPATH)
+            # DEBUG TEXTO
+            # =========================
+            if "Vacância" in html:
+                print("✅ Encontrou 'Vacância'")
+            else:
+                print("❌ NÃO encontrou 'Vacância'")
+
+            # =========================
+            # PEGAR TODOS %
+            # =========================
+            elementos = await page.locator("span.converter-percentual").all_inner_texts()
+            print("📊 Percentuais encontrados:", elementos)
+
+            # =========================
+            # VACÂNCIA
             # =========================
             vacancia = "N/D"
-            try:
-                vacancia_el = page.locator(
-                    "xpath=/html/body/div[2]/div/section[2]/div/div[2]/div[3]/div[2]/div/div[1]/div/div[3]/div/div[1]/div/div/span"
-                )
-                vacancia_text = await vacancia_el.inner_text()
-                vacancia = vacancia_text.replace("%", "").strip()
-
-                print("✅ Vacância:", vacancia)
-            except:
-                print("❌ Vacância não encontrada")
+            if len(elementos) > 0:
+                vacancia = elementos[0].replace("%", "").strip()
 
             # =========================
-            # 🎯 INADIMPLÊNCIA (XPATH)
+            # INADIMPLÊNCIA
             # =========================
             inad = "N/D"
-            try:
-                inad_el = page.locator(
-                    "xpath=/html/body/div[2]/div/section[2]/div/div[2]/div[3]/div[2]/div/div[1]/div/div[3]/div/div[2]/div/div/span"
-                )
-                inad_text = await inad_el.inner_text()
-                inad = inad_text.replace("%", "").strip()
+            if len(elementos) > 1:
+                inad = elementos[1].replace("%", "").strip()
 
-                print("✅ Inadimplência:", inad)
-            except:
-                print("❌ Inadimplência não encontrada")
+            print("✅ Vacância:", vacancia)
+            print("✅ Inadimplência:", inad)
 
             await browser.close()
 
@@ -65,7 +71,7 @@ async def get_data(ticker):
         }
 
     except Exception as e:
-        print("❌ ERRO:", str(e))
+        print("💥 ERRO:", str(e))
         return {
             "vacancia": "N/D",
             "inadimplencia": "N/D",
@@ -75,7 +81,7 @@ async def get_data(ticker):
 
 
 # =========================
-# 🔥 MAIN
+# MAIN
 # =========================
 async def main():
     result = {}
@@ -83,10 +89,10 @@ async def main():
     for t in TICKERS:
         result[t] = await get_data(t)
 
-    # 🔥 cria pasta se não existir
+    # cria pasta
     os.makedirs("data", exist_ok=True)
 
-    # 🔥 salva JSON
+    # salva json
     with open("data/fii.json", "w") as f:
         json.dump(result, f, indent=2)
 
@@ -94,7 +100,4 @@ async def main():
     print(json.dumps(result, indent=2))
 
 
-# =========================
-# RUN
-# =========================
 asyncio.run(main())
