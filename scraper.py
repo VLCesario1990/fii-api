@@ -1,39 +1,62 @@
 import asyncio
 import re
+import json
 from playwright.async_api import async_playwright
+
 
 async def get_vacancia(ticker):
     url = f"https://www.fundsexplorer.com.br/funds/{ticker.lower()}"
 
     print("\n==========================")
-    print(f"🔎 {ticker}")
-    print(f"🌐 {url}")
+    print(f"🔎 TICKER: {ticker}")
+    print(f"🌐 URL: {url}")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
 
-        await page.goto(url, timeout=60000)
+        # 🔥 CONTEXTO "HUMANO"
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 720}
+        )
 
-        # espera mais inteligente
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(5000)
+        page = await context.new_page()
+
+        # 🔥 esconder webdriver
+        await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        """)
 
         try:
-            # 🔥 pega TODOS os textareas
+            await page.goto(url, timeout=60000)
+
+            # simular comportamento humano
+            await page.mouse.move(100, 200)
+            await page.wait_for_timeout(2000)
+
+            # esperar carregar JS
+            await page.wait_for_load_state("networkidle")
+            await page.wait_for_timeout(10000)
+
+            # DEBUG HTML
+            html = await page.content()
+            print("\n📄 HTML (inicio):")
+            print(html[:500])
+
+            # 🔥 pegar TODOS textareas
             textareas = await page.query_selector_all("textarea")
 
-            print(f"🧠 Encontrados {len(textareas)} textarea(s)")
+            print(f"\n🧠 Encontrados {len(textareas)} textarea(s)")
 
             for i, ta in enumerate(textareas):
                 content = await ta.input_value()
 
                 print(f"\n📄 TEXTAREA {i}:")
-                print(content[:200])
+                print(content[:300])
 
-                # 🔥 identifica o certo pelo conteúdo
-                if "Vacância" in content or "%" in content:
-
+                if "%" in content:
                     linhas = content.strip().split("\n")
                     ultima = linhas[-1]
 
@@ -42,6 +65,7 @@ async def get_vacancia(ticker):
                     if valores:
                         vacancia = valores[-1]
                         print(f"✅ Vacância encontrada: {vacancia}")
+
                         await browser.close()
                         return vacancia
 
@@ -50,45 +74,30 @@ async def get_vacancia(ticker):
             return "N/D"
 
         except Exception as e:
-            print("❌ ERRO:", e)
+            print("❌ ERRO:", str(e))
             await browser.close()
             return "N/D"
 
 
 async def main():
     tickers = ["xpml11", "mxrf11", "tepp11"]
-        
-    """
-    TICKERS =
-    ["ADSH11","AFHI11","AFHF11","ATWN11","AJFI11","ALZC11","MTOF11","ALZR11","AURB11","APXM11","APXU11","AIEC11","AVUR11","AROA11","EIRA11","ARTE11","ARXD11","AZPE11","AZPL11","AZSG11","CEBB11",
-    "BCRI11","BNFS11","BTML11","BZEL11","BPDR11","BPLC11","BPMW11","BBFO11","BBFI11","BBIG11","BBRC11","BINR11","BFCC11","BGRB11","BGRJ11","BLOG11","BLMG11","BMLC11","BRSE11","BCIA11","BVAR11",
-    "CARE11","FATN11","RTEL11","BRCT11","BRCD11","BRCO11","BICE11","BIME11","BRIM11","BRIP11","BIPD11","BIPE11","MCMV11","BROF11","BETW11","LLAO11","BTHR11","BTHI11","BRCR11","BTCI11","BTLG11",
-    "BTHF11","BPML11","BTYU11","BTWR11","BTSI11","CXCO11","CRFF11","CXRI11","CCME11","CCVA11","CPUR11","CPLG11","CPOF11","CPTS11","CPSH11","CACR11","CBOP11","BLCA11","CVFL11","CNES11","CDHY11",
-    "CTXT11","CENU11","CFII11","CJCT11","CLSM11","CIXM11","CIXF11","PDBM11","CLIN11","CSMC11","RENV11","IBCR11","CVPR11","CYCR11","CYLD11","DAMA11","DAYM11","ASRF11","DLMT11","DPRO11","DEVA11",
-    "DAMT11","DOVL11","EDGE11","EMET11","EGYR11","EQIR11","ERCR11","ERPA11","KEVE11","EXES11","FLCR11","VRTA11","VRTM11","FTRE11","FLMA11","EGDB11","ELDO11","EURO11","HYPI11","HRES11","FIIB11",
-    "FMOF11","OPTM11","FRBC11","ALMI11","FLNR11","HLMB11","KFOF11","DVFF11","ANCR11","FAED11","FCFL11","CEOC11","FAMB11","EDGA11","FYTO11","HCRI11","NSLU11","MAXR11","PQDP11","RBRI11","RDIV11",
-    "RBRR11","RECR11","RECT11","SHDP11","TRNT11","APXR11","BRHT11","BRCQ11","CXAG11","CXCI11","CXCE11","CXTL11","IDUA11","LKDV11","EDFO11","NVHO11","GTWR11","HBCR11","HUCG11","HUSC11","HOSI11",
-    "FINF11","BLUE11","MMPD11","MCCI11","WTSP11","PABY11","VTPA11","FPNG11","VTPL11","ESTQ11","VPSI11","RBRY11","PULV11","RBRP11","RELG11","RZTR11","ROOF11","HOMS11","FISC11","SAIC11","SMRE11",
-    "SOFF11","SPVJ11","TGAR11","TRCO11","TRUE11","LVBI11","PVBI11","VERE11","FIVN11","VSHO11","XPRE11","BMLT11","FIIC11","BSLT11","TCIN11","GCDL11","GSRF11","GFDL11","GLPF11","GLCR11","GCRI11",
-    "GCOI11","GZIT11","FIGS11","GSFI11","VXXV11","GLOG11","ABCP11","RCFA11","GAME11","GARE11","HABT11","ATCR11","HCTB11","AERO11","HCTR11","HCST11","HCHG11","HAAA11","ATSA11","HGBL11","HGBS11",
-    "HDEL11","FLRP11","HJCT11","HLOG11","HOFC11","HDOF11","HRDF11","HREC11","SEED11","HPDP11","HFOF11","YEES11","HGIC11","HIRE11","HILG11","HTMX11","HSAF11","HSLG11","HSML11","HSRE11","HUSI11",
-    "IVCI11","GRUL11","ICNE11","IMMB11","INDE11","INLG11","INRD11","ITIP11","ITIT11","IBBP11","XPIN11","IRIM11","ICDI11","ICRI11","ILOG11","TMPS11","ITRI11","JCDB11","JCDA11","JASC11","VJFD11",
-    "JFLL11","JCCJ11","JPPA11","JSAF11","JSRE11","JSCR11","JTPR11","BGS111","KISU11","KIVO11","KRES11","KCRE11","KNGR11","KGUJ11","KLOG11","KDLG11","KFEN11","KNHF11","KNHY11","KNRE11","KNIP11",
-    "KOIM11","KORE11","KNPR11","KPMR11","KPRP11","KNRI11","KNCR11","KNSC11","KNUQ11","LMAI11","LPLP11","SLDZ11","LRED11","LSOI11","LSII11","LSOP11","LRDI11","LASC11","LIFE11","LOFT11","MAGM11",
-    "MAGM11","MANA11","MMVE11","MCLO11","MCRE11","MXRF11","MCEM11","MFII11","MIDW11","MGHT11","MGRI11","MOSO11","SHOP11","MOFF11","NCRI11","NAVT11","APTO11","EAGL11","NEWL11","NEWU11","NMKS11",
-    "NVIF11","OCRE11","ONDA11","ARRI11","OBAL11","FTCE11","OUJP11","OXRL11","PNCR11","PNDL11","PNLM11","PNPR11","PNRC11","PMIS11","VTVI11","PQAG11","PATA11","PATB11","PCIP11","PATC11","HGRE11",
-    "HGLG11","PLAG11","PATL11","PMLL11","HGPO11","HGCR11","VCRR11","HGRU11","PSEC11","PEMA11","PMRL11","PRSN11","PORD11","PLRI11","PCAS11","PRSV11","TSER11","FPAB11","PBLV11","QTZD11","RZZV11",
-    "RZZI11","RZZR11","RBDS11","RSPD11","RBIR11","RFOF11","RBLG11","FIIP11","RBRD11","RBTS11","DRIM11","MTES11","REME11","RCFF11","RDCI11","RDLI11","SHIP11","RBRL11","RBRX11","RPRI11","RBRK11",
-    "TOPP11","RINV11","RCRI11","RECD11","RMBS11","RECM11","RBHG11","RBHY11","RBFY11","RBFM11","RBOP11","RCRB11","RBRS11","RBVA11","RNGO11","FRRE11","RZAK11","RZAT11","RZLC11","RJDA11","SAPI11",
-    "FISD11","SCPF11","SEQR11","SHPH11","SHPP11","WPLZ11","REIT11","SJAU11","SOLR11","SPTW11","SPAF11","LTMT11","DVLP11","DVLT11","PMFO11","SPGM11","SPG211","SPXM11","SPXL11","SPXG11","SPXS11",
-    "STRX11","STYI11","SURE11","SNEL11","SNFF11","SNLG11","SNME11","SNCI11","SPMO11","TELD11","TELM11","TEPP11","TRBL11","NAUI11","TRPL11","TVOI11","TIOM11","TVRI11","VOTS11","TJKB11","TORD11",
-    "TSNC11","TCPF11","TRXY11","TRXF11","TRXB11","URHF11","URPR11","VVCO11","VVMR11","VPPR11","VVCR11","VVRI11","VGRM11","VGIR11","VGIP11","VGII11","VGHF11","VGRI11","BLMO11","VCJR11","VLJS11",
-    "VNSS11","SALI11","VCTH11","VSLH11","FVPQ11","VIDS11","VDSV11","VCRI11","VIUR11","VILG11","VIMO11","VINO11","VIOL11","VISC11","SPDE11","WHGR11","XLPR11","XPCM11","XPCI11","XPLG11","XPML11",
-    "XPSF11","YUFI11","ZAGH11","GGRC11","ZAVC11","ZAVI11","ZIFI11"]
-    """
+
+    resultado = {}
 
     for t in tickers:
-        await get_vacancia(t)
+        vacancia = await get_vacancia(t)
+
+        resultado[t] = {
+            "vacancia": vacancia
+        }
+
+    print("\n📊 RESULTADO FINAL:")
+    print(json.dumps(resultado, indent=2))
+
+    # 🔥 salvar JSON
+    with open("data/fii.json", "w") as f:
+        json.dump(resultado, f, indent=2)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
