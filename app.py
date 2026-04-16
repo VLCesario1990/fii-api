@@ -1,63 +1,33 @@
-import requests
-from bs4 import BeautifulSoup
+from flask import Flask, jsonify
 import json
-import re
+import os
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
+app = Flask(__name__)
 
-def get_meusdividendos(ticker):
-    try:
-        ticker_base = ticker.replace("11", "").lower()
-        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
+DATA_FILE = "data/fii.json"
 
-        response = requests.get(url, headers=HEADERS, timeout=10)
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE) as f:
+        return json.load(f)
 
-        print("🔎 URL:", url)
-        print("Status:", response.status_code)
-        print("📄 HTML (inicio):")
-        print(response.text[:300])
+@app.route("/")
+def home():
+    return jsonify({"status": "API FII leve 🚀"})
 
-        if response.status_code != 200:
-            return {"erro": "Erro ao acessar site"}
+@app.route("/fii/<ticker>")
+def fii(ticker):
+    data = load_data()
+    ticker = ticker.lower()
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        text = soup.get_text(" ", strip=True)
-
-        # VACÂNCIA
-        vacancia = "N/D"
-        match = re.search(r"Vac[âa]ncia Financeira\s*([0-9]+,[0-9]+|[0-9]+)%", text)
-        if match:
-            vacancia = match.group(1)
-
-        # INADIMPLÊNCIA
-        inad = "N/D"
-        match = re.search(r"Inadimpl[êe]ncia\s*([0-9]+,[0-9]+|[0-9]+)%", text)
-        if match:
-            inad = match.group(1)
-
-        # PORTFÓLIO
-        portfolio = list(set(re.findall(r"[A-Z]{4}\d{2}", response.text)))
-
-        return {
+    if ticker in data:
+        return jsonify({
             "ticker": ticker.upper(),
-            "vacancia": vacancia,
-            "inadimplencia": inad,
-            "portfolio": portfolio[:10]
-        }
+            **data[ticker]
+        })
 
-    except Exception as e:
-        return {"erro": str(e)}
+    return jsonify({"erro": "Ticker não encontrado"})
 
-
-# TESTE
 if __name__ == "__main__":
-    ticker = "xpml11"
-
-    print("🚀 TESTANDO:", ticker)
-
-    resultado = get_meusdividendos(ticker)
-
-    print("📊 RESULTADO:")
-    print(json.dumps(resultado, indent=2, ensure_ascii=False))
+    app.run(host="0.0.0.0", port=8080)
