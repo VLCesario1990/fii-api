@@ -1,7 +1,9 @@
-name: Atualizar FIIs
+name: Scraper FII
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # botão manual
+  schedule:
+    - cron: "0 12 * * *"
 
 jobs:
   run:
@@ -9,17 +11,17 @@ jobs:
 
     steps:
       - name: Clonar repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Instalar Python
-        uses: actions/setup-python@v5
+      - name: Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Instalar Playwright
+      - name: Instalar dependências
         run: |
           pip install -r requirements.txt
-          playwright install chromium
+          playwright install --with-deps
 
       - name: Rodar scraper
         run: python scraper.py
