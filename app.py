@@ -1,22 +1,63 @@
 import requests
 from bs4 import BeautifulSoup
+import json
 import re
 
-url = "https://www.meusdividendos.com/fundo-imobiliario/tepp"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
 
-response = requests.get(url)
-soup = BeautifulSoup(response.text, "html.parser")
+def get_meusdividendos(ticker):
+    try:
+        ticker_base = ticker.replace("11", "").lower()
+        url = f"https://www.meusdividendos.com/fundo-imobiliario/{ticker_base}"
 
-rows = soup.find_all("tr")
+        response = requests.get(url, headers=HEADERS, timeout=10)
 
-print("🔎 RESULTADO:\n")
+        print("🔎 URL:", url)
+        print("Status:", response.status_code)
+        print("📄 HTML (inicio):")
+        print(response.text[:300])
 
-for row in rows:
-    cols = row.find_all("td")
+        if response.status_code != 200:
+            return {"erro": "Erro ao acessar site"}
 
-    if len(cols) >= 6:
-        nome = cols[0].text.strip()
-        vac = cols[3].text.strip()
-        inad = cols[4].text.strip()
+        soup = BeautifulSoup(response.text, "html.parser")
+        text = soup.get_text(" ", strip=True)
 
-        print(nome, "| Vac:", vac, "| Inad:", inad)
+        # VACÂNCIA
+        vacancia = "N/D"
+        match = re.search(r"Vac[âa]ncia Financeira\s*([0-9]+,[0-9]+|[0-9]+)%", text)
+        if match:
+            vacancia = match.group(1)
+
+        # INADIMPLÊNCIA
+        inad = "N/D"
+        match = re.search(r"Inadimpl[êe]ncia\s*([0-9]+,[0-9]+|[0-9]+)%", text)
+        if match:
+            inad = match.group(1)
+
+        # PORTFÓLIO
+        portfolio = list(set(re.findall(r"[A-Z]{4}\d{2}", response.text)))
+
+        return {
+            "ticker": ticker.upper(),
+            "vacancia": vacancia,
+            "inadimplencia": inad,
+            "portfolio": portfolio[:10]
+        }
+
+    except Exception as e:
+        return {"erro": str(e)}
+
+
+# TESTE
+if __name__ == "__main__":
+    ticker = "xpml11"
+
+    print("🚀 TESTANDO:", ticker)
+
+    resultado = get_meusdividendos(ticker)
+
+    print("📊 RESULTADO:")
+    print(json.dumps(resultado, indent=2, ensure_ascii=False))
