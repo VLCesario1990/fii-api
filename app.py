@@ -6,7 +6,7 @@ client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 response = client.models.generate_content(
     model="gemini-1.5-flash",
     contents="Inadimplência XPML11",
-    contents="Vacânmcia XPML11",
+    contents="Vacância XPML11",
 )
 
 print(response.text)
