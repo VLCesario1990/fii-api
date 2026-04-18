@@ -1,11 +1,11 @@
 import os
-import google.generativeai as genai
+from google import genai
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
-model = genai.GenerativeModel("gemini-1.5-pro")
+response = client.models.generate_content(
+    model="gemini-1.5-flash",
+    contents="Inadimplência XPML11"
+)
 
-prompt = "Inadimplência XPML11"
-
-response = model.generate_content(prompt)
 print(response.text)
