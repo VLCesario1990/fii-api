@@ -15,10 +15,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar Chrome
+      - name: Instalar dependências
         run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser
+          pip install selenium webdriver-manager
 
       - name: Instalar dependências
         run: pip install selenium webdriver-manager beautifulsoup4
