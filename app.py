@@ -1,23 +1,21 @@
-import os
-from google import genai
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+import time
 
-fii = "XPML11"
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")  # roda sem abrir navegador
 
-client = genai.Client(
-    api_key=os.environ["GEMINI_API_KEY"],
-    http_options={"api_version": "v1"}
-)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-response = client.models.generate_content(
-    model="gemini-2.0-flash",
-    contents=f"""
-Analise o fundo {fii}:
+driver.get("https://investidor10.com.br/fiis/xpml11/")
 
-- Inadimplência
-- Vacância
+time.sleep(5)  # espera carregar JS
 
-Explique situação atual e riscos.
-"""
-)
+# pega tudo da página
+texto = driver.page_source
 
-print(response.text)
+driver.quit()
+
+print(texto[:2000])
