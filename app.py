@@ -1,5 +1,6 @@
 import re
 import csv
+import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -9,6 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
+time.sleep(60)
 
 agora = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d-%m-%Y %H:%M")
 
