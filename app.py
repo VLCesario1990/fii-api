@@ -56,20 +56,60 @@ for fii in fiis:
         wait = WebDriverWait(driver, 20)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # 🔥 limpa HTML (ESSENCIAL)
+        # =========================
+        # 📊 VACÂNCIA / INADIMPLÊNCIA
+        # =========================
         soup = BeautifulSoup(driver.page_source, "html.parser")
         texto = soup.get_text(" ", strip=True).lower()
 
-        # 🔍 regex mais confiável
         vacancia_match = re.search(r"vac[aâ]ncia.*?(\d+,\d+)%", texto)
         inad_match = re.search(r"inadimpl[êe]ncia.*?(\d+,\d+)%", texto)
 
         vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0
         inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0
 
+        # =========================
+        # 🏢 SETOR (AgendaDividendos)
+        # =========================
+        driver.get(f"https://agendadividendos.com/empresa/{fii}")
+
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+        try:
+            setor_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//strong[contains(text(),'SETOR')]/following::div[1]")
+                )
+            )
+
+            setor = setor_element.text.strip().replace("\n", " ")
+
+            if "/" in setor:
+                setor = setor.split("/")[0]
+
+        except:
+            setor = "N/A"
+
+        # =========================
+        # 📌 SEGMENTO
+        # =========================
+        try:
+            segmento_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//strong[contains(text(),'SEGMENTO')]/following::div[1]")
+                )
+            )
+
+            segmento = segmento_element.text.strip().replace("\n", " ")
+
+        except:
+            segmento = "N/A"
+
         resultado[fii.upper()] = {
             "vacancia": vacancia,
-            "inadimplencia": inadimplencia
+            "inadimplencia": inadimplencia,
+            "setor": setor,
+            "segmento": segmento
         }
 
         print("Resultado:", resultado[fii.upper()])
@@ -78,7 +118,9 @@ for fii in fiis:
         print(f"🔥 ERRO em {fii.upper()}: {e}")
         resultado[fii.upper()] = {
             "vacancia": 0,
-            "inadimplencia": 0
+            "inadimplencia": 0,
+            "setor": "N/A",
+            "segmento": "N/A"
         }
 
 driver.quit()
@@ -93,6 +135,8 @@ for fii, dados in resultado.items():
         fii,
         dados["vacancia"],
         dados["inadimplencia"],
+        dados["setor"],
+        dados["segmento"],
         agora
     ])
 
@@ -105,9 +149,11 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
         "FII",
         "Vacancia",
         "Inadimplencia",
+        "Setor",
+        "Segmento",
         "DataAtualizacao"
     ])
 
     writer.writerows(linhas)
 
-print("✅ CSV gerado com sucesso!")
+print("\n✅ CSV gerado com sucesso!")
