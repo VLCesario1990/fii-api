@@ -36,8 +36,8 @@ driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), opti
 # =========================
 # 🔧 FUNÇÃO AUXILIAR
 # =========================
-def converter(valor):
-    return float(valor.replace(",", "."))
+def converter_percentual(valor):
+    return float(valor.replace(",", ".")) / 100
 
 resultado = {}
 
