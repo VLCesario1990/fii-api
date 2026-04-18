@@ -21,9 +21,5 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: Instalar dependências
-        run: pip install selenium webdriver-manager beautifulsoup4
-             pip install google-api-python-client google-auth
-
       - name: Rodar script
         run: python app.py
