@@ -26,3 +26,11 @@ jobs:
         run: python app.py
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+
+      - name: Commit CSV
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@github.com"
+          git add dados_fiis.csv
+          git commit -m "update csv" || echo "no changes"
+          git push
