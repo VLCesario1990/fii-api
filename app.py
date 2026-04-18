@@ -140,7 +140,7 @@ creds = Credentials.from_service_account_info(
 service = build("drive", "v3", credentials=creds)
 
 # 👉 ID da sua pasta (já peguei da sua imagem)
-PASTA_ID = "1AUGdmBwfQWwv14K_vHeFk06K2fgwcbeb"
+PASTA_ID = "1AUGdmBwfQWww14K_vHeFk06K2fgwcbeb"
 
 # 🔎 verifica se já existe
 query = f"name='dados_fiis.csv' and '{PASTA_ID}' in parents and trashed=false"
