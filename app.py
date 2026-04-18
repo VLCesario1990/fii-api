@@ -1,6 +1,5 @@
 import re
 import csv
-import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -10,34 +9,38 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
-time.sleep(60)
 
+# =========================
+# 🕒 DATA BR
+# =========================
 agora = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d-%m-%Y %H:%M")
 
 # =========================
-# 🔹 LISTA DE FIIs
+# 📄 LISTA DE FIIs
 # =========================
 with open("fii.txt", "r", encoding="utf-8") as f:
     fiis = [linha.strip().lower() for linha in f if linha.strip()]
 
 # =========================
-# 🔧 CONFIG SELENIUM
+# 🔧 SELENIUM
 # =========================
 options = webdriver.ChromeOptions()
-options.add_argument("--headless")
+options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--headless=new")
 options.add_argument("--disable-gpu")
 options.add_argument("--window-size=1920,1080")
 
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 # =========================
-# 🔧 FUNÇÃO AUXILIAR
+# 🔧 FUNÇÕES
 # =========================
 def converter_percentual(valor):
     return float(valor.replace(",", ".")) / 100
+
+def normalizar(texto):
+    return texto.replace("í", "i").replace("é", "e").replace("ã", "a")
 
 resultado = {}
 
@@ -45,26 +48,37 @@ resultado = {}
 # 🔎 SCRAPING
 # =========================
 for fii in fiis:
-    print(f"\n🔎 Processando {fii.upper()}...")
+    print(f"\n🔎 {fii.upper()}")
 
     url = f"https://investidor10.com.br/fiis/{fii}/"
     driver.get(url)
 
-    wait = WebDriverWait(driver, 15)
+    wait = WebDriverWait(driver, 20)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-    texto = driver.page_source.lower()
+    texto = normalizar(driver.page_source.lower())
 
-    # 🔍 regex
-    vacancia_match = re.search(r"vac[aâ]ncia.*?(\d+,\d+)%", texto)
-    inad_match = re.search(r"inadimpl[êe]ncia.*?(\d+,\d+)%", texto)
+    # 🔍 REGEX MAIS SEGURA
+    vacancia_match = re.search(r"vacancia[^%]*?(\d+,\d+)%", texto)
+    inad_match = re.search(r"inadimplencia[^%]*?(\d+,\d+)%", texto)
 
-    vacancia = converter(vacancia_match.group(1)) if vacancia_match else None
-    inadimplencia = converter(inad_match.group(1)) if inad_match else None
+    tipo_match = re.search(r"tipo[^a-z]*(tijolo|papel|hibrido|misto|fii de fundos)", texto)
+
+    segmento_match = re.search(
+        r"segmento[^a-z]*(logistica|shopping|lajes corporativas|escritorios|residencial|hotel|hospital|educacional)",
+        texto
+    )
+
+    vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else None
+    inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else None
+    tipo = tipo_match.group(1).capitalize() if tipo_match else "N/A"
+    segmento = segmento_match.group(1).capitalize() if segmento_match else "N/A"
 
     resultado[fii.upper()] = {
         "vacancia": vacancia,
-        "inadimplencia": inadimplencia
+        "inadimplencia": inadimplencia,
+        "tipo": tipo,
+        "segmento": segmento
     }
 
     print("Resultado:", resultado[fii.upper()])
@@ -72,13 +86,20 @@ for fii in fiis:
 driver.quit()
 
 # =========================
-# 💾 GERAR CSV (;)
+# 💾 CSV FINAL
 # =========================
 with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f, delimiter=";")
 
-    # cabeçalho
-    writer.writerow(["FII", "Vacancia", "Inadimplencia"])
+    # cabeçalho corrigido
+    writer.writerow([
+        "FII",
+        "Vacancia",
+        "Inadimplencia",
+        "Tipo",
+        "Segmento",
+        "DataAtualizacao"
+    ])
 
     # dados
     for fii, dados in resultado.items():
@@ -86,7 +107,9 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
             fii,
             dados["vacancia"],
             dados["inadimplencia"],
+            dados["tipo"],
+            dados["segmento"],
             agora
         ])
 
-print("\n✅ CSV 'dados_fiis.csv' gerado com sucesso!")
+print("\n✅ CSV gerado com sucesso!")
