@@ -10,7 +10,7 @@ from selenium.webdriver.support import expected_conditions as EC
 # =========================
 # 🔹 LISTA DE FIIs
 # =========================
-with open("fiis.txt", "r", encoding="utf-8") as f:
+with open("fii.txt", "r", encoding="utf-8") as f:
     fiis = [linha.strip().lower() for linha in f if linha.strip()]
 
 # =========================
