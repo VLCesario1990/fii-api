@@ -58,7 +58,7 @@ for fii in fiis:
 
     texto = normalizar(driver.page_source.lower())
 
-    # 🔍 REGEX MAIS SEGURA
+    # 🔍 REGEX
     vacancia_match = re.search(r"vacancia[^%]*?(\d+,\d+)%", texto)
     inad_match = re.search(r"inadimplencia[^%]*?(\d+,\d+)%", texto)
 
@@ -86,12 +86,26 @@ for fii in fiis:
 driver.quit()
 
 # =========================
-# 💾 CSV FINAL
+# 💾 CSV FINAL (SOBRESCREVE)
 # =========================
+linhas = []
+
+for fii, dados in resultado.items():
+    linhas.append([
+        fii,
+        dados["vacancia"],
+        dados["inadimplencia"],
+        dados["tipo"],
+        dados["segmento"],
+        agora
+    ])
+
+# ordena por FII
+linhas.sort(key=lambda x: x[0])
+
 with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f, delimiter=";")
 
-    # cabeçalho corrigido
     writer.writerow([
         "FII",
         "Vacancia",
@@ -101,15 +115,6 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
         "DataAtualizacao"
     ])
 
-    # dados
-    for fii, dados in resultado.items():
-        writer.writerow([
-            fii,
-            dados["vacancia"],
-            dados["inadimplencia"],
-            dados["tipo"],
-            dados["segmento"],
-            agora
-        ])
+    writer.writerows(linhas)
 
-print("\n✅ CSV gerado com sucesso!")
+print("\n✅ CSV sobrescrito com sucesso!")
