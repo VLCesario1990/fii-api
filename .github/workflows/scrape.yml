@@ -2,8 +2,6 @@ name: Rodar scraping
 
 on:
   workflow_dispatch:
-  schedule:
-  - cron: "0 21 * * 1-5"
 
 jobs:
   run:
