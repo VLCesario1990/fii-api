@@ -1,5 +1,8 @@
 import re
 import csv
+import os
+import json
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -58,7 +61,6 @@ for fii in fiis:
 
     texto = normalizar(driver.page_source.lower())
 
-    # 🔍 REGEX
     vacancia_match = re.search(r"vacancia[^%]*?(\d+,\d+)%", texto)
     inad_match = re.search(r"inadimplencia[^%]*?(\d+,\d+)%", texto)
 
@@ -86,7 +88,7 @@ for fii in fiis:
 driver.quit()
 
 # =========================
-# 💾 CSV FINAL (SOBRESCREVE)
+# 💾 CSV LOCAL
 # =========================
 linhas = []
 
@@ -100,10 +102,11 @@ for fii, dados in resultado.items():
         agora
     ])
 
-# ordena por FII
 linhas.sort(key=lambda x: x[0])
 
-with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
+file_path = "dados_fiis.csv"
+
+with open(file_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f, delimiter=";")
 
     writer.writerow([
@@ -117,4 +120,46 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
 
     writer.writerows(linhas)
 
-print("\n✅ CSV sobrescrito com sucesso!")
+print("✅ CSV gerado localmente!")
+
+# =========================
+# ☁️ ENVIO PARA GOOGLE DRIVE
+# =========================
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
+cred_json = os.environ["GOOGLE_CREDENTIALS"]
+cred_dict = json.loads(cred_json)
+
+creds = Credentials.from_service_account_info(
+    cred_dict,
+    scopes=["https://www.googleapis.com/auth/drive"]
+)
+
+service = build("drive", "v3", credentials=creds)
+
+# 👉 ID da sua pasta (já peguei da sua imagem)
+PASTA_ID = "1AUGdmBwfQWwv14K_vHeFk06K2fgwcbeb"
+
+# 🔎 verifica se já existe
+query = f"name='dados_fiis.csv' and '{PASTA_ID}' in parents and trashed=false"
+files = service.files().list(q=query).execute().get("files", [])
+
+media = MediaFileUpload(file_path, mimetype="text/csv")
+
+if files:
+    service.files().update(
+        fileId=files[0]["id"],
+        media_body=media
+    ).execute()
+    print("🔄 CSV atualizado no Google Drive!")
+else:
+    service.files().create(
+        body={
+            "name": "dados_fiis.csv",
+            "parents": [PASTA_ID]
+        },
+        media_body=media
+    ).execute()
+    print("📤 CSV enviado para o Google Drive!")
