@@ -79,7 +79,8 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
         writer.writerow([
             fii,
             dados["vacancia"],
-            dados["inadimplencia"]
+            dados["inadimplencia"],
+            agora
         ])
 
 print("\n✅ CSV 'dados_fiis.csv' gerado com sucesso!")
