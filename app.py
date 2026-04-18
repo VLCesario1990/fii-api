@@ -34,19 +34,32 @@ options.add_argument("--disable-gpu")
 options.add_argument("--window-size=1920,1080")
 
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+wait = WebDriverWait(driver, 20)
 
 # =========================
 # 🔧 FUNÇÕES
 # =========================
-def converter_percentual(valor):
-    return round(float(valor.replace(",", ".")) / 100, 4)
-
 def limpar_numero(valor):
+    valor = valor.replace("R$", "").replace("%", "").strip()
     valor = valor.replace(".", "").replace(",", ".")
     try:
         return float(valor)
     except:
         return 0
+
+def converter_percentual(valor):
+    return round(float(valor.replace(",", ".")) / 100, 4)
+
+# 🔥 função inteligente (ESSA É A CHAVE)
+def pegar_valor(label):
+    try:
+        el = driver.find_element(
+            By.XPATH,
+            f"//*[contains(text(),'{label}')]/following::span[1]"
+        )
+        return el.text.strip()
+    except:
+        return ""
 
 resultado = {}
 
@@ -60,15 +73,14 @@ for fii in fiis:
         url = f"https://investidor10.com.br/fiis/{fii}/"
         driver.get(url)
 
-        wait = WebDriverWait(driver, 20)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
+        # =========================
+        # TEXTO (regex)
+        # =========================
         soup = BeautifulSoup(driver.page_source, "html.parser")
         texto = soup.get_text(" ", strip=True).lower()
 
-        # =========================
-        # 📊 VACÂNCIA / INADIMPLÊNCIA
-        # =========================
         vacancia_match = re.search(r"vac[aâ]ncia.*?(\d+,\d+)%", texto)
         inad_match = re.search(r"inadimpl[êe]ncia.*?(\d+,\d+)%", texto)
 
@@ -76,60 +88,42 @@ for fii in fiis:
         inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0
 
         # =========================
-        # 🏢 TIPO / SEGMENTO / PRAZO
+        # 📊 INDICADORES (estáveis)
+        # =========================
+        preco = limpar_numero(pegar_valor("R$"))
+        pvp = limpar_numero(pegar_valor("P/VP"))
+        dy = limpar_numero(pegar_valor("DY (12M)")) / 100
+
+        cotas = limpar_numero(pegar_valor("Nº de cotas"))
+        cotistas = limpar_numero(pegar_valor("Nº de cotistas"))
+
+        # =========================
+        # 📌 INFO DO FUNDO
         # =========================
         try:
-            tipo = driver.find_element(By.XPATH, "//div[contains(text(),'Tipo de fundo')]/following::div[1]").text
+            tipo = driver.find_element(By.XPATH, "//*[contains(text(),'Tipo de Fundo')]/following::div[1]").text
         except:
             tipo = "N/A"
 
         try:
-            segmento = driver.find_element(By.XPATH, "//div[contains(text(),'Segmento')]/following::div[1]").text
+            segmento = driver.find_element(By.XPATH, "//*[contains(text(),'Segmento')]/following::div[1]").text
         except:
             segmento = "N/A"
 
         try:
-            prazo = driver.find_element(By.XPATH, "//div[contains(text(),'Prazo de duração')]/following::div[1]").text
+            prazo = driver.find_element(By.XPATH, "//*[contains(text(),'Prazo de duração')]/following::div[1]").text
         except:
             prazo = "N/A"
 
-        # =========================
-        # 📊 INDICADORES
-        # =========================
-        try:
-            preco = limpar_numero(driver.find_element(By.XPATH, "//span[@class='value']").text)
-        except:
-            preco = 0
-
-        try:
-            pvp = limpar_numero(driver.find_element(By.XPATH, "//span[contains(text(),'P/VP')]/following::span[1]").text)
-        except:
-            pvp = 0
-
-        try:
-            dy = limpar_numero(driver.find_element(By.XPATH, "//span[contains(text(),'DY (12M)')]/following::span[1]").text) / 100
-        except:
-            dy = 0
-
-        try:
-            cotas = limpar_numero(driver.find_element(By.XPATH, "//span[contains(text(),'Nº de cotas')]/following::span[1]").text)
-        except:
-            cotas = 0
-
-        try:
-            cotistas = limpar_numero(driver.find_element(By.XPATH, "//span[contains(text(),'Nº de cotistas')]/following::span[1]").text)
-        except:
-            cotistas = 0
-
         resultado[fii.upper()] = {
-            "vacancia": vacancia,
-            "inadimplencia": inadimplencia,
-            "tipo": tipo,
-            "segmento": segmento,
-            "prazo": prazo,
             "preco": preco,
             "pvp": pvp,
             "dy": dy,
+            "tipo": tipo,
+            "segmento": segmento,
+            "vacancia": vacancia,
+            "inadimplencia": inadimplencia,
+            "prazo": prazo,
             "cotas": cotas,
             "cotistas": cotistas
         }
@@ -139,14 +133,14 @@ for fii in fiis:
     except Exception as e:
         print(f"🔥 ERRO em {fii.upper()}: {e}")
         resultado[fii.upper()] = {
-            "vacancia": 0,
-            "inadimplencia": 0,
-            "tipo": "N/A",
-            "segmento": "N/A",
-            "prazo": "N/A",
             "preco": 0,
             "pvp": 0,
             "dy": 0,
+            "tipo": "N/A",
+            "segmento": "N/A",
+            "vacancia": 0,
+            "inadimplencia": 0,
+            "prazo": "N/A",
             "cotas": 0,
             "cotistas": 0
         }
@@ -196,4 +190,4 @@ with open("dados_fiis.csv", "w", newline="", encoding="utf-8") as f:
 
     writer.writerows(linhas)
 
-print("\n✅ CSV completo gerado com sucesso!")
+print("\n✅ CSV COMPLETO GERADO COM SUCESSO!")
