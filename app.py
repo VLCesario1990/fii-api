@@ -1,12 +1,20 @@
 import os
 from google import genai
 
+fii = "XPML11"
+
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 response = client.models.generate_content(
     model="gemini-1.5-flash",
-    contents="Inadimplência XPML11",
-    contents="Vacância XPML11",
+    contents=f"""
+Analise o fundo {fii}:
+
+- Inadimplência
+- Vacância
+
+Explique situação atual e riscos.
+"""
 )
 
 print(response.text)
