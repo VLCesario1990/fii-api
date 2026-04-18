@@ -1,33 +1,12 @@
-from flask import Flask, jsonify
-import json
-import os
+import google.generativeai as genai
 
-app = Flask(__name__)
+genai.configure(api_key="AIzaSyAj1w4yrtT_1210T5ZUT7kaF6xZ-xCtqUI")
 
-DATA_FILE = "data/fii.json"
+model = genai.GenerativeModel("gemini-pro")
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {}
-    with open(DATA_FILE) as f:
-        return json.load(f)
+prompt = """
+Inadimplência XPML11
+"""
 
-@app.route("/")
-def home():
-    return jsonify({"status": "API FII leve 🚀"})
-
-@app.route("/fii/<ticker>")
-def fii(ticker):
-    data = load_data()
-    ticker = ticker.lower()
-
-    if ticker in data:
-        return jsonify({
-            "ticker": ticker.upper(),
-            **data[ticker]
-        })
-
-    return jsonify({"erro": "Ticker não encontrado"})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+response = model.generate_content(prompt)
+print(response.text)
