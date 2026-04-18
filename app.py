@@ -40,7 +40,7 @@ driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), opti
 # 🔧 FUNÇÕES
 # =========================
 def converter_percentual(valor):
-    return float(valor.replace(",", ".")) / 100
+    return round(float(valor.replace(",", ".")) / 100, 4)
 
 def normalizar(texto):
     return texto.replace("í", "i").replace("é", "e").replace("ã", "a")
@@ -61,8 +61,8 @@ for fii in fiis:
 
     texto = normalizar(driver.page_source.lower())
 
-    vacancia_match = re.search(r"vac[aâ]ncia.*?(\d+,\d+)%", texto)
-    inad_match = re.search(r"inadimpl[êe]ncia.*?(\d+,\d+)%", texto)
+    vacancia_match = re.search(r"vac[aâ]ncia[^0-9]*?(\d+,\d+)%", texto)
+    inad_match = re.search(r"inadimpl[êe]ncia[^0-9]*?(\d+,\d+)%", texto)
 
     tipo_match = re.search(r"tipo[^a-z]*(tijolo|papel|hibrido|misto|fii de fundos)", texto)
 
@@ -71,8 +71,8 @@ for fii in fiis:
         texto
     )
 
-    vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0
-    inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0
+    vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0%
+    inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0%
     tipo = tipo_match.group(1).capitalize() if tipo_match else "N/A"
     segmento = segmento_match.group(1).capitalize() if segmento_match else "N/A"
 
