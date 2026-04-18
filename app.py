@@ -71,8 +71,8 @@ for fii in fiis:
         texto
     )
 
-    vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0%
-    inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0%
+    vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0
+    inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0
     tipo = tipo_match.group(1).capitalize() if tipo_match else "N/A"
     segmento = segmento_match.group(1).capitalize() if segmento_match else "N/A"
 
