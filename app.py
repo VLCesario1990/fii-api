@@ -64,23 +64,12 @@ for fii in fiis:
     vacancia_match = re.search(r"vac[aâ]ncia[^0-9]*?(\d+,\d+)%", texto)
     inad_match = re.search(r"inadimpl[êe]ncia[^0-9]*?(\d+,\d+)%", texto)
 
-    tipo_match = re.search(r"tipo[^a-z]*(tijolo|papel|hibrido|misto|fii de fundos)", texto)
-
-    segmento_match = re.search(
-        r"segmento[^a-z]*(logistica|shopping|lajes corporativas|escritorios|residencial|hotel|hospital|educacional)",
-        texto
-    )
-
     vacancia = converter_percentual(vacancia_match.group(1)) if vacancia_match else 0
     inadimplencia = converter_percentual(inad_match.group(1)) if inad_match else 0
-    tipo = tipo_match.group(1).capitalize() if tipo_match else "N/A"
-    segmento = segmento_match.group(1).capitalize() if segmento_match else "N/A"
 
     resultado[fii.upper()] = {
         "vacancia": vacancia,
-        "inadimplencia": inadimplencia,
-        "tipo": tipo,
-        "segmento": segmento
+        "inadimplencia": inadimplencia
     }
 
     print("Resultado:", resultado[fii.upper()])
@@ -97,8 +86,6 @@ for fii, dados in resultado.items():
         fii,
         dados["vacancia"],
         dados["inadimplencia"],
-        dados["tipo"],
-        dados["segmento"],
         agora
     ])
 
@@ -113,8 +100,6 @@ with open(file_path, "w", newline="", encoding="utf-8") as f:
         "FII",
         "Vacancia",
         "Inadimplencia",
-        "Tipo",
-        "Segmento",
         "DataAtualizacao"
     ])
 
