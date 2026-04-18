@@ -24,3 +24,5 @@ jobs:
 
       - name: Rodar script
         run: python app.py
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
